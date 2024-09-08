@@ -1,3 +1,4 @@
+// package lexer deals with the lexical scanning.
 package lexer
 
 // Lexer is a lexical scanner
