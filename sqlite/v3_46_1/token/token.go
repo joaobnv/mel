@@ -158,7 +158,7 @@ const (
 // Token is a token from the code.
 type Token struct {
 	// Lexeme is the lexeme of the token.
-	Lexeme string
+	Lexeme []byte
 	// Kind is the kind of the token.
 	Kind Kind
 }
