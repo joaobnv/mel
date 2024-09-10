@@ -35,9 +35,9 @@ const (
 	KindCreate
 	KindCross
 	KindCurrent
-	KindCurrentdate
-	KindCurrenttime
-	KindCurrenttimestamp
+	KindCurrentDate
+	KindCurrentTime
+	KindCurrentTimestamp
 	KindDatabase
 	KindDefault
 	KindDeferrable
@@ -153,6 +153,9 @@ const (
 	KindWindow
 	KindWith
 	KindWithout
+	// end of keywords
+	KindIdentifier
+	KindError
 )
 
 // Token is a token from the code.
@@ -161,4 +164,9 @@ type Token struct {
 	Lexeme []byte
 	// Kind is the kind of the token.
 	Kind Kind
+}
+
+// New creates a Token.
+func New(lexeme []byte, kind Kind) *Token {
+	return &Token{Lexeme: lexeme, Kind: kind}
 }
