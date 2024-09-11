@@ -170,6 +170,21 @@ func New(code []byte) *Lexer {
 	return &Lexer{r: newReader(code)}
 }
 
+// Next returns the next token.
+func (l *Lexer) Next() *token.Token {
+	l.discardWhiteSpace()
+	r, eof := l.r.readRune()
+	if eof {
+		return token.New(nil, token.KindEOF)
+	}
+
+	if unicode.IsLetter(r) || strings.ContainsRune("_`\"[", r) {
+		return l.word()
+	} else {
+		panic("not implemented yet")
+	}
+}
+
 // discardWhiteSpace reads and discards white space.
 func (l *Lexer) discardWhiteSpace() {
 	var (
