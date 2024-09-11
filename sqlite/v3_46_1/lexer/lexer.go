@@ -170,6 +170,19 @@ func New(code []byte) *Lexer {
 	return &Lexer{r: newReader(code)}
 }
 
+// discardWhiteSpace reads and discards white space.
+func (l *Lexer) discardWhiteSpace() {
+	var (
+		eof bool
+		r   rune
+	)
+	for r, eof = l.r.readRune(); !eof && unicode.IsSpace(r); r, eof = l.r.readRune() {
+	}
+	if !eof {
+		l.r.unreadRune()
+	}
+}
+
 // word scans a keyword or a identifier.
 func (l *Lexer) word() *token.Token {
 	offsetStart := l.r.getOffset()
