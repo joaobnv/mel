@@ -156,6 +156,7 @@ const (
 	// end of keywords
 	KindIdentifier
 	KindError
+	KindEOF
 )
 
 // Token is a token from the code.
