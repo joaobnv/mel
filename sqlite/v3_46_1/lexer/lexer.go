@@ -191,7 +191,7 @@ func (l *Lexer) discardWhiteSpace() {
 		eof bool
 		r   rune
 	)
-	for r, eof = l.r.readRune(); !eof && unicode.IsSpace(r); r, eof = l.r.readRune() {
+	for r, eof = l.r.readRune(); !eof && strings.ContainsRune("\t\n\x0C\x0D ", r); r, eof = l.r.readRune() {
 	}
 	if !eof {
 		l.r.unreadRune()
