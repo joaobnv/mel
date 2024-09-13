@@ -2,6 +2,7 @@
 package lexer
 
 import (
+	"errors"
 	"mel/sqlite/v3_46_1/token"
 	"strings"
 	"unicode"
@@ -179,6 +180,7 @@ func (l *Lexer) Next() *token.Token {
 	}
 
 	if unicode.IsLetter(r) || strings.ContainsRune("_`\"[", r) {
+		l.r.unreadRune()
 		return l.word()
 	} else {
 		panic("not implemented yet")
@@ -281,7 +283,7 @@ func (r *reader) readRune() (rn rune, eof bool) {
 		if size == 0 {
 			return 0, true
 		} else {
-			panic("utf-8 encoding invalid")
+			panic(errors.New("utf-8 encoding invalid"))
 		}
 	}
 	r.offset += int64(size)
@@ -300,7 +302,7 @@ func (r *reader) unreadRune() (onStart bool) {
 			return r.offset == 0
 		}
 	}
-	panic("utf-8 encoding invalid")
+	panic(errors.New("utf-8 encoding invalid"))
 }
 
 // getOffset returns the current offset.
