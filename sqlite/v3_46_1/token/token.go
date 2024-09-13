@@ -235,7 +235,8 @@ func (t *Token) String() string {
 	return b.String()
 }
 
-// MarshalText implements encoding.TextMarshaler. err is always nil.
+// MarshalText implements encoding.TextMarshaler. err is always nil. The format is <lexeme, kind>, with the
+// lexeme quoted (strconv.Quote).
 func (t *Token) MarshalText() (text []byte, err error) {
 	return []byte(t.String()), nil
 }
