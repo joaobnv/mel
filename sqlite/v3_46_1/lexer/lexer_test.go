@@ -118,6 +118,33 @@ func TestReaderUnreadOnStart(t *testing.T) {
 	}
 }
 
+// TestReaderUnreadOnStart tests the case where the unreadRune is called more than one times.
+func TestReaderMoreThanOneUnread(t *testing.T) {
+	r := newReader([]byte("abcde"))
+
+	r.readRune()
+	r.readRune()
+	r.readRune()
+	r.readRune()
+	r.readRune()
+
+	r.unreadRune()
+	r.unreadRune()
+	r.unreadRune()
+	r.unreadRune()
+	r.unreadRune()
+
+	rn, eof := r.readRune()
+	if eof {
+		t.Errorf("at EOF")
+		return
+	}
+
+	if rn != 'a' {
+		t.Errorf("exected 'a', got %q", rn)
+	}
+}
+
 // TestReaderUnreadPanic tests the case where a unreadRune cannot find a valid start of rune.
 func TestReaderUnreadPanic(t *testing.T) {
 	defer func() {
