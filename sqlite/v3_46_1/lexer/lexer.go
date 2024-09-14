@@ -193,7 +193,7 @@ func (l *Lexer) discardWhiteSpace() {
 		eof bool
 		r   rune
 	)
-	for r, eof = l.r.readRune(); !eof && strings.ContainsRune("\t\n\x0C\x0D ", r); r, eof = l.r.readRune() {
+	for r, eof = l.r.readRune(); !eof && l.isWhiteSpace(r); r, eof = l.r.readRune() {
 	}
 	if !eof {
 		l.r.unreadRune()
@@ -204,10 +204,10 @@ func (l *Lexer) discardWhiteSpace() {
 func (l *Lexer) word() *token.Token {
 	offsetStart := l.r.getOffset()
 	r, _ := l.r.readRune()
-	if unicode.IsLetter(r) {
+	if l.isAlphabetic(r) {
 		var eof bool
 		for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
-			if !unicode.IsLetter(r) && r != '_' && !strings.ContainsRune("0123456789", r) {
+			if !l.isAlphanumeric(r) && r != '$' {
 				break
 			}
 		}
