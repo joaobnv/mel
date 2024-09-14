@@ -268,7 +268,7 @@ func (l *Lexer) isWhiteSpace(r rune) bool {
 
 // isAlphabetic reports whether the rune is alphabetic (with respect to the SQLite SQL dialect).
 func (l *Lexer) isAlphabetic(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r > 0x7F
+	return r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r > 0x7F
 }
 
 // isNumeric reports whether the rune is numeric (with respect to the SQLite SQL dialect).
