@@ -262,7 +262,7 @@ func (l *Lexer) word() *token.Token {
 }
 
 // isAlphabetic reports whether the rune is alphabetic (with respect to the SQLite SQL dialect).
-func isAlphabetic(r rune) bool {
+func (l *Lexer) isAlphabetic(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r > 0x7F
 }
 
