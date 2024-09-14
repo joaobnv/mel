@@ -261,9 +261,34 @@ func (l *Lexer) word() *token.Token {
 	}
 }
 
+// isWhiteSpace reports whether the rune is white space (with respect to the SQLite SQL dialect).
+func (l *Lexer) isWhiteSpace(r rune) bool {
+	return strings.ContainsRune("\t\n\x0C\x0D ", r)
+}
+
 // isAlphabetic reports whether the rune is alphabetic (with respect to the SQLite SQL dialect).
 func (l *Lexer) isAlphabetic(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r > 0x7F
+}
+
+// isNumeric reports whether the rune is numeric (with respect to the SQLite SQL dialect).
+func (l *Lexer) isNumeric(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+// isAlphanumeric reports whether the rune is alphanumeric (with respect to the SQLite SQL dialect).
+func (l *Lexer) isAlphanumeric(r rune) bool {
+	return l.isAlphabetic(r) || l.isNumeric(r)
+}
+
+// isHexadecimal reports whether the rune is hexadecimal (with respect to the SQLite SQL dialect).
+func (l *Lexer) isHexadecimal(r rune) bool {
+	return l.isNumeric(r) || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+}
+
+// isSpecial reports whether the rune is special (with respect to the SQLite SQL dialect).
+func (l *Lexer) isSpecial(r rune) bool {
+	return !l.isWhiteSpace(r) && !l.isAlphabetic(r) && !l.isNumeric(r)
 }
 
 // reader reads from the code.
