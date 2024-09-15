@@ -174,13 +174,12 @@ func New(code []byte) *Lexer {
 // Next returns the next token.
 func (l *Lexer) Next() *token.Token {
 	l.discardWhiteSpace()
-	r, eof := l.r.readRune()
+	r, eof := l.r.peekRune()
 	if eof {
 		return token.New(nil, token.KindEOF)
 	}
 
 	if unicode.IsLetter(r) || strings.ContainsRune("_`\"[", r) {
-		l.r.unreadRune()
 		return l.word()
 	} else {
 		panic("not implemented yet")
@@ -317,6 +316,20 @@ func (r *reader) readRune() (rn rune, eof bool) {
 		}
 	}
 	r.offset += int64(size)
+	return
+}
+
+// peekRune returns the next rune but dont advances the lexer, this means that if readRune is called it will return the same rune.
+// Similarly for the EOF.
+func (r *reader) peekRune() (rn rune, eof bool) {
+	rn, size := utf8.DecodeRune(r.code[r.offset:])
+	if rn == utf8.RuneError {
+		if size == 0 {
+			return 0, true
+		} else {
+			panic(errors.New("utf-8 encoding invalid"))
+		}
+	}
 	return
 }
 
