@@ -222,7 +222,10 @@ func (l *Lexer) word() *token.Token {
 		var eof bool
 		for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
 			if r == '"' {
-				break
+				if pr, peof := l.r.peekRune(); peof || pr != '"' {
+					break
+				}
+				l.r.readRune()
 			}
 		}
 		lexeme := l.r.slice(offsetStart, l.r.getOffset())
@@ -248,7 +251,10 @@ func (l *Lexer) word() *token.Token {
 		var eof bool
 		for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
 			if r == '`' {
-				break
+				if pr, peof := l.r.peekRune(); peof || pr != '`' {
+					break
+				}
+				l.r.readRune()
 			}
 		}
 		lexeme := l.r.slice(offsetStart, l.r.getOffset())
