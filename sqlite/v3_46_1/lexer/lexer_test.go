@@ -31,6 +31,11 @@ func TestLexer(t *testing.T) {
 		{code: "`TABLE", tokens: parseTokens("<\"`TABLE: unexpected EOF\", Error> <EOF>")},
 		{code: "'TABLE'", tokens: parseTokens("<\"'TABLE'\", String> <EOF>")},
 		{code: "'TAB''LE'", tokens: parseTokens("<\"'TAB''LE'\", String> <EOF>")},
+		{code: "X'CAFE'", tokens: parseTokens("<\"X'CAFE'\", Blob> <EOF>")},
+		{code: "x'cafe'", tokens: parseTokens("<\"x'cafe'\", Blob> <EOF>")},
+		// the lexer doesn't care if the number of hexadecimal runes is even
+		{code: "x'C0FEE'", tokens: parseTokens("<\"x'C0FEE'\", Blob> <EOF>")},
+		{code: "x'CAR'", tokens: parseTokens("<\"x'CAR: a blob must contain only hexadecimal characters\", Error> <\"': unexpected EOF\", Error> <EOF>")},
 	}
 
 	for _, c := range cases {
@@ -63,7 +68,7 @@ func TestLexer(t *testing.T) {
 
 // parseTokens unmarshalls tkens from code.
 func parseTokens(code string) (result []*token.Token) {
-	re := regexp.MustCompile(`<(?:("(?:[^\\]|\\"|\\[^"])*"),\s?)?([a-zA-Z]+)>`)
+	re := regexp.MustCompile(`<(?:("(?:[^\\]|\\"|\\[^"])*?"),\s?)?([a-zA-Z]+)>`)
 	matches := re.FindAllString(code, -1)
 	for i := range matches {
 		var tok token.Token

@@ -174,14 +174,16 @@ func New(code []byte) *Lexer {
 // Next returns the next token.
 func (l *Lexer) Next() *token.Token {
 	l.discardWhiteSpace()
-	r, eof := l.r.peekRune()
-	if eof {
+	rs, _ := l.r.peekNRunes(2)
+	if len(rs) == 0 {
 		return token.New(nil, token.KindEOF)
 	}
 
-	if unicode.IsLetter(r) || strings.ContainsRune("_`\"[", r) {
+	if len(rs) == 2 && (rs[0] == 'x' || rs[0] == 'X') && rs[1] == '\'' {
+		return l.blob()
+	} else if unicode.IsLetter(rs[0]) || strings.ContainsRune("_`\"[", rs[0]) {
 		return l.word()
-	} else if r == '\'' {
+	} else if rs[0] == '\'' {
 		return l.string()
 	} else {
 		panic("not implemented yet")
@@ -199,6 +201,33 @@ func (l *Lexer) discardWhiteSpace() {
 	if !eof {
 		l.r.unreadRune()
 	}
+}
+
+// blob scans a blob.
+func (l *Lexer) blob() *token.Token {
+	var (
+		eof bool
+		r   rune
+	)
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	l.r.readRune()
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == '\'' {
+			break
+		}
+		if !l.isHexadecimal(r) {
+			lexeme := l.r.slice(offsetStart, l.r.getOffset())
+			err := string(lexeme) + ": a blob must contain only hexadecimal characters"
+			return token.New([]byte(err), token.KindError)
+		}
+	}
+	lexeme := l.r.slice(offsetStart, l.r.getOffset())
+	if eof {
+		err := string(lexeme) + ": unexpected EOF"
+		return token.New([]byte(err), token.KindError)
+	}
+	return token.New(lexeme, token.KindBlob)
 }
 
 // word scans a keyword or a identifier.
@@ -362,6 +391,26 @@ func (r *reader) peekRune() (rn rune, eof bool) {
 			panic(errors.New("utf-8 encoding invalid"))
 		}
 	}
+	return
+}
+
+// peekNRunes returns the next n runes but dont advances the lexer. It can returns less than n runes if EOF is found before
+// n runes are read.
+func (r *reader) peekNRunes(n int) (rs []rune, eof bool) {
+	offset := r.getOffset()
+	for range n {
+		rn, size := utf8.DecodeRune(r.code[offset:])
+		if rn == utf8.RuneError {
+			if size == 0 {
+				return rs, true
+			} else {
+				panic(errors.New("utf-8 encoding invalid"))
+			}
+		}
+		rs = append(rs, rn)
+		offset += int64(size)
+	}
+
 	return
 }
 
