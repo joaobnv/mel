@@ -29,6 +29,8 @@ func TestLexer(t *testing.T) {
 		{code: "`TABLE`", tokens: parseTokens("<\"`TABLE`\", Identifier> <EOF>")},
 		{code: "`TAB``LE`", tokens: parseTokens("<\"`TAB``LE`\", Identifier> <EOF>")},
 		{code: "`TABLE", tokens: parseTokens("<\"`TABLE: unexpected EOF\", Error> <EOF>")},
+		{code: "'TABLE'", tokens: parseTokens("<\"'TABLE'\", String> <EOF>")},
+		{code: "'TAB''LE'", tokens: parseTokens("<\"'TAB''LE'\", String> <EOF>")},
 	}
 
 	for _, c := range cases {

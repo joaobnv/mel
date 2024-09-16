@@ -163,6 +163,7 @@ const (
 	KindWithout
 	// end of keywords
 	KindIdentifier
+	KindString
 	KindError
 	KindEOF
 )
@@ -206,7 +207,7 @@ var kindString = []string{
 	"References", "Regexp", "Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback",
 	"Row", "Rows", "Savepoint", "Select", "Set", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction",
 	"Trigger", "Unbounded", "Union", "Unique", "Update", "Using", "Vacuum", "Values", "View", "Virtual", "When",
-	"Where", "Window", "With", "Without", "Identifier", "Error", "EOF",
+	"Where", "Window", "With", "Without", "Identifier", "String", "Error", "EOF",
 }
 
 // Token is a token from the code.

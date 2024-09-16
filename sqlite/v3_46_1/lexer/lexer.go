@@ -181,6 +181,8 @@ func (l *Lexer) Next() *token.Token {
 
 	if unicode.IsLetter(r) || strings.ContainsRune("_`\"[", r) {
 		return l.word()
+	} else if r == '\'' {
+		return l.string()
 	} else {
 		panic("not implemented yet")
 	}
@@ -264,6 +266,30 @@ func (l *Lexer) word() *token.Token {
 		}
 		return token.New(lexeme, token.KindIdentifier)
 	}
+}
+
+// string scans a string.
+func (l *Lexer) string() *token.Token {
+	var (
+		eof bool
+		r   rune
+	)
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == '\'' {
+			if pr, peof := l.r.peekRune(); peof || pr != '\'' {
+				break
+			}
+			l.r.readRune()
+		}
+	}
+	lexeme := l.r.slice(offsetStart, l.r.getOffset())
+	if eof {
+		err := string(lexeme) + ": unexpected EOF"
+		return token.New([]byte(err), token.KindError)
+	}
+	return token.New(lexeme, token.KindString)
 }
 
 // isWhiteSpace reports whether the rune is white space (with respect to the SQLite SQL dialect).
