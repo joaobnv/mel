@@ -185,6 +185,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.word()
 	} else if rs[0] == '\'' {
 		return l.string()
+	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
+		return l.operator()
 	} else {
 		panic("not implemented yet")
 	}
@@ -230,7 +232,7 @@ func (l *Lexer) blob() *token.Token {
 	return token.New(lexeme, token.KindBlob)
 }
 
-// word scans a keyword or a identifier.
+// word scans a keyword or an identifier.
 func (l *Lexer) word() *token.Token {
 	offsetStart := l.r.getOffset()
 	r, _ := l.r.readRune()
@@ -319,6 +321,97 @@ func (l *Lexer) string() *token.Token {
 		return token.New([]byte(err), token.KindError)
 	}
 	return token.New(lexeme, token.KindString)
+}
+
+// operator scans an operator.
+func (l *Lexer) operator() *token.Token {
+	offsetStart := l.r.getOffset()
+	r, _ := l.r.readRune()
+	var kind token.Kind
+	switch r {
+	case '-':
+		kind = token.KindMinus
+	case '(':
+		kind = token.KindLeftParen
+	case ')':
+		kind = token.KindRightParen
+	case ';':
+		kind = token.KindSemicolon
+	case '+':
+		kind = token.KindPlus
+	case '*':
+		kind = token.KindAsterisk
+	case '/':
+		kind = token.KindSlash
+	case '%':
+		kind = token.KindPercent
+	case ',':
+		kind = token.KindComma
+	case '&':
+		kind = token.KindAmpersand
+	case '~':
+		kind = token.KindTilde
+	case '.':
+		kind = token.KindDot
+	case '=':
+		r, eof := l.r.peekRune()
+		if eof || r != '=' {
+			kind = token.KindEqual
+		} else {
+			kind = token.KindEqualEqual
+			l.r.readRune()
+		}
+	case '<':
+		r, eof := l.r.peekRune()
+		if eof || !strings.ContainsRune("=><", r) {
+			kind = token.KindLessThan
+		} else if r == '=' {
+			kind = token.KindLessThanOrEqual
+			l.r.readRune()
+		} else if r == '<' {
+			kind = token.KindLessThanLessThan
+			l.r.readRune()
+		} else {
+			kind = token.KindLessThanGreaterThan
+			l.r.readRune()
+		}
+	case '>':
+		r, eof := l.r.peekRune()
+		if eof || !strings.ContainsRune("=>", r) {
+			kind = token.KindGreaterThan
+		} else if r == '=' {
+			kind = token.KindGreaterThanEqual
+			l.r.readRune()
+		} else {
+			kind = token.KindGreaterThanGreaterThan
+			l.r.readRune()
+		}
+	case '!':
+		r, eof := l.r.readRune()
+		if eof {
+			lexeme := l.r.slice(offsetStart, l.r.getOffset())
+			err := string(lexeme) + ": unexpected EOF"
+			return token.New([]byte(err), token.KindError)
+		}
+		if r == '=' {
+			kind = token.KindExclamationEqual
+		} else {
+			l.r.unreadRune()
+			lexeme := l.r.slice(offsetStart, l.r.getOffset())
+			err := string(lexeme) + ": unexpected character"
+			return token.New([]byte(err), token.KindError)
+		}
+	default: // r == '|'
+		r, eof := l.r.peekRune()
+		if eof || r != '|' {
+			kind = token.KindPipe
+		} else {
+			kind = token.KindPipePipe
+			l.r.readRune()
+		}
+	}
+	lexeme := l.r.slice(offsetStart, l.r.getOffset())
+	return token.New(lexeme, kind)
 }
 
 // isWhiteSpace reports whether the rune is white space (with respect to the SQLite SQL dialect).

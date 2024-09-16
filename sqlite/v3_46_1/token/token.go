@@ -165,6 +165,30 @@ const (
 	KindIdentifier
 	KindString
 	KindBlob
+	KindMinus
+	KindLeftParen
+	KindRightParen
+	KindSemicolon
+	KindPlus
+	KindAsterisk
+	KindSlash
+	KindPercent
+	KindEqual
+	KindEqualEqual
+	KindLessThanOrEqual
+	KindLessThanGreaterThan
+	KindLessThanLessThan
+	KindLessThan
+	KindGreaterThanEqual
+	KindGreaterThanGreaterThan
+	KindGreaterThan
+	KindExclamationEqual
+	KindComma
+	KindAmpersand
+	KindTilde
+	KindPipe
+	KindPipePipe
+	KindDot
 	KindError
 	KindEOF
 )
@@ -208,7 +232,10 @@ var kindString = []string{
 	"References", "Regexp", "Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback",
 	"Row", "Rows", "Savepoint", "Select", "Set", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction",
 	"Trigger", "Unbounded", "Union", "Unique", "Update", "Using", "Vacuum", "Values", "View", "Virtual", "When",
-	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Error", "EOF",
+	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Minus", "LeftParen", "RightParen",
+	"Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
+	"LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual",
+	"Comma", "Ampersand", "Tilde", "Pipe", "PipePipe", "Dot", "Error", "EOF",
 }
 
 // Token is a token from the code.
