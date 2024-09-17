@@ -1,4 +1,4 @@
-// package lexer deals with the lexical scanning.
+// This package deals with the lexical scanning.
 package lexer
 
 import (
@@ -185,6 +185,10 @@ func (l *Lexer) Next() *token.Token {
 		return l.word()
 	} else if rs[0] == '\'' {
 		return l.string()
+	} else if l.isNumeric(rs[0]) {
+		return l.numeric()
+	} else if len(rs) == 2 && rs[0] == '.' && l.isNumeric(rs[1]) {
+		return l.numeric()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -321,6 +325,119 @@ func (l *Lexer) string() *token.Token {
 		return token.New([]byte(err), token.KindError)
 	}
 	return token.New(lexeme, token.KindString)
+}
+
+// string scans a numeric literal.
+func (l *Lexer) numeric() *token.Token {
+	offsetStart := l.r.getOffset()
+	rs, _ := l.r.peekNRunes(2)
+	if (l.isNumeric(rs[0]) && rs[0] != '0') || (l.isNumeric(rs[0]) && rs[1] != 'x' && rs[1] != 'X') {
+		if l.numericDigits() {
+			return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+		}
+
+		r, _ := l.r.peekRune()
+		if r == '.' {
+			l.r.readRune()
+			r, eof := l.r.peekRune()
+			if eof || !l.isNumeric(r) {
+				return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+			}
+			if l.numericDigits() {
+				return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+			}
+		}
+
+		l.numericExponentialPart()
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+	} else if rs[0] == '.' {
+		l.r.readRune()
+		if l.numericDigits() {
+			return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+		}
+
+		l.numericExponentialPart()
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+	} else { // len(rs) == 2 && rs[0] == '0' && (rs[1] == 'x' || rs[1] == 'X') {
+		l.r.readRune()
+		l.r.readRune()
+		l.numericHexDigits()
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindNumeric)
+	}
+}
+
+// numericDigits scans the part of a numeric literal where digits and underscores can apear.
+func (l *Lexer) numericDigits() (eof bool) {
+	var r rune
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == '_' {
+			pr, peof := l.r.peekRune()
+			if peof || !l.isNumeric(pr) {
+				l.r.unreadRune()
+				return false
+			}
+		} else if !l.isNumeric(r) {
+			l.r.unreadRune()
+			break
+		}
+	}
+	return
+}
+
+// numericHexDigits scans the part of a hexadecimal numeric literal where hexadecimal digits and underscores can apear.
+func (l *Lexer) numericHexDigits() (eof bool) {
+	var r rune
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == '_' {
+			pr, peof := l.r.peekRune()
+			if peof || !l.isHexadecimal(pr) {
+				l.r.unreadRune()
+				return false
+			}
+		} else if !l.isHexadecimal(r) {
+			l.r.unreadRune()
+			break
+		}
+	}
+	return
+}
+
+// numericExponentialPart scans the exponential part of a numeric literal. It doesn't expect the next runes to be of an
+// exponential part of a numeric literal. If they are not then match will be false and the reader will not be advanced.
+func (l *Lexer) numericExponentialPart() (match bool, eof bool) {
+	if match = l.isStartOfNumericExponentialPart(); !match {
+		return
+	}
+	l.r.readRune()
+	r, _ := l.r.peekRune()
+	if r == '-' || r == '+' {
+		l.r.readRune()
+	}
+	eof = l.numericDigits()
+	return
+}
+
+// isStartOfNumericExponentialPart reports if the next runes are the start of the exponential part of a numeric literal.
+// It dont advances the reader.
+func (l *Lexer) isStartOfNumericExponentialPart() (is bool) {
+	rs, _ := l.r.peekNRunes(3)
+	if len(rs) < 2 || rs[0] != 'e' && rs[0] != 'E' {
+		return
+	}
+	if !l.isNumeric(rs[1]) && rs[1] != '-' && rs[1] != '+' {
+		return
+	}
+	var withSign bool
+	if rs[1] == '+' || rs[1] == '-' {
+		withSign = true
+	}
+	if withSign && len(rs) < 3 {
+		return
+	}
+	if withSign && !l.isNumeric(rs[2]) {
+		return
+	}
+	return true
 }
 
 // operator scans an operator.

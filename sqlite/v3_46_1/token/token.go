@@ -1,4 +1,4 @@
-// package token deals with tokens.
+// This package deals with tokens.
 package token
 
 import (
@@ -165,6 +165,7 @@ const (
 	KindIdentifier
 	KindString
 	KindBlob
+	KindNumeric
 	KindMinus
 	KindLeftParen
 	KindRightParen
@@ -232,7 +233,7 @@ var kindString = []string{
 	"References", "Regexp", "Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback",
 	"Row", "Rows", "Savepoint", "Select", "Set", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction",
 	"Trigger", "Unbounded", "Union", "Unique", "Update", "Using", "Vacuum", "Values", "View", "Virtual", "When",
-	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Minus", "LeftParen", "RightParen",
+	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "Minus", "LeftParen", "RightParen",
 	"Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
 	"LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual",
 	"Comma", "Ampersand", "Tilde", "Pipe", "PipePipe", "Dot", "Error", "EOF",
