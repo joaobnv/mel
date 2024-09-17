@@ -189,6 +189,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.numeric()
 	} else if len(rs) == 2 && rs[0] == '.' && l.isNumeric(rs[1]) {
 		return l.numeric()
+	} else if len(rs) == 2 && rs[0] == '-' && rs[1] == '-' {
+		return l.sqlComment()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -327,7 +329,7 @@ func (l *Lexer) string() *token.Token {
 	return token.New(lexeme, token.KindString)
 }
 
-// string scans a numeric literal.
+// numeric scans a numeric literal.
 func (l *Lexer) numeric() *token.Token {
 	offsetStart := l.r.getOffset()
 	rs, _ := l.r.peekNRunes(2)
@@ -438,6 +440,20 @@ func (l *Lexer) isStartOfNumericExponentialPart() (is bool) {
 		return
 	}
 	return true
+}
+
+// sqlComment scans a SQL-style comment.
+func (l *Lexer) sqlComment() *token.Token {
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	l.r.readRune()
+	for r, eof := l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == '\n' {
+			l.r.unreadRune()
+			break
+		}
+	}
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindSQLComment)
 }
 
 // operator scans an operator.

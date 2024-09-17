@@ -166,6 +166,7 @@ const (
 	KindString
 	KindBlob
 	KindNumeric
+	KindSQLComment
 	KindMinus
 	KindLeftParen
 	KindRightParen
@@ -233,10 +234,10 @@ var kindString = []string{
 	"References", "Regexp", "Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback",
 	"Row", "Rows", "Savepoint", "Select", "Set", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction",
 	"Trigger", "Unbounded", "Union", "Unique", "Update", "Using", "Vacuum", "Values", "View", "Virtual", "When",
-	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "Minus", "LeftParen", "RightParen",
-	"Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
-	"LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual",
-	"Comma", "Ampersand", "Tilde", "Pipe", "PipePipe", "Dot", "Error", "EOF",
+	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "SQLComment", "Minus", "LeftParen",
+	"RightParen", "Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual",
+	"LessThanGreaterThan", "LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan",
+	"ExclamationEqual", "Comma", "Ampersand", "Tilde", "Pipe", "PipePipe", "Dot", "Error", "EOF",
 }
 
 // Token is a token from the code.

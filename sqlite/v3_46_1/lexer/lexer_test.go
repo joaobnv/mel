@@ -63,6 +63,8 @@ func TestLexer(t *testing.T) {
 		{code: "0x0_F", tokens: parseTokens(`<"0x0_F", Numeric> <EOF>`)},
 		{code: "0x0_F_", tokens: parseTokens(`<"0x0_F", Numeric> <"_", Identifier> <EOF>`)},
 		{code: "0x0_FQ", tokens: parseTokens(`<"0x0_F", Numeric> <"Q", Identifier> <EOF>`)},
+		{code: "-- comment", tokens: parseTokens(`<"-- comment", SQLComment> <EOF>`)},
+		{code: "-- comment\ntable", tokens: parseTokens(`<"-- comment", SQLComment> <"table", Table> <EOF>`)},
 		{code: "-", tokens: parseTokens(`<"-", Minus> <EOF>`)},
 		{code: "(", tokens: parseTokens(`<"(", LeftParen> <EOF>`)},
 		{code: ")", tokens: parseTokens(`<")", RightParen> <EOF>`)},
