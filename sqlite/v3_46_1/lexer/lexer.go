@@ -193,6 +193,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.sqlComment()
 	} else if len(rs) == 2 && rs[0] == '/' && rs[1] == '*' {
 		return l.cComment()
+	} else if rs[0] == '?' {
+		return l.questionVariable()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -478,6 +480,23 @@ func (l *Lexer) cComment() *token.Token {
 		}
 	}
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindCComment)
+}
+
+// questionVariable scans a question variable.
+func (l *Lexer) questionVariable() *token.Token {
+	var r rune
+	var eof bool
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if !l.isNumeric(r) {
+			break
+		}
+	}
+	if !eof {
+		l.r.unreadRune()
+	}
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindQuestionVariable)
 }
 
 // operator scans an operator.
