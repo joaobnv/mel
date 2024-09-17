@@ -65,6 +65,12 @@ func TestLexer(t *testing.T) {
 		{code: "0x0_FQ", tokens: parseTokens(`<"0x0_F", Numeric> <"Q", Identifier> <EOF>`)},
 		{code: "-- comment", tokens: parseTokens(`<"-- comment", SQLComment> <EOF>`)},
 		{code: "-- comment\ntable", tokens: parseTokens(`<"-- comment", SQLComment> <"table", Table> <EOF>`)},
+		{code: "/**/", tokens: parseTokens(`<"/**/", CComment> <EOF>`)},
+		{code: "/*****/ table", tokens: parseTokens(`<"/*****/", CComment> <"table", Table> <EOF>`)},
+		{code: "/**", tokens: parseTokens(`<"/**", CComment> <EOF>`)},
+		{code: "/* comment\n table", tokens: parseTokens(`<"/* comment\n table", CComment> <EOF>`)},
+		{code: "/* comment*/ table", tokens: parseTokens(`<"/* comment*/", CComment> <"table", Table> <EOF>`)},
+		{code: "/* comment* **/ table", tokens: parseTokens(`<"/* comment* **/", CComment> <"table", Table> <EOF>`)},
 		{code: "-", tokens: parseTokens(`<"-", Minus> <EOF>`)},
 		{code: "(", tokens: parseTokens(`<"(", LeftParen> <EOF>`)},
 		{code: ")", tokens: parseTokens(`<")", RightParen> <EOF>`)},
@@ -72,6 +78,7 @@ func TestLexer(t *testing.T) {
 		{code: "+", tokens: parseTokens(`<"+", Plus> <EOF>`)},
 		{code: "*", tokens: parseTokens(`<"*", Asterisk> <EOF>`)},
 		{code: "/", tokens: parseTokens(`<"/", Slash> <EOF>`)},
+		{code: "/ * */", tokens: parseTokens(`<"/", Slash> <"*", Asterisk> <"*", Asterisk> <"/", Slash> <EOF>`)},
 		{code: "%", tokens: parseTokens(`<"%", Percent> <EOF>`)},
 		{code: "=", tokens: parseTokens(`<"=", Equal> <EOF>`)},
 		{code: "==", tokens: parseTokens(`<"==", EqualEqual> <EOF>`)},
@@ -150,7 +157,7 @@ func printTokens(b *strings.Builder, expected, scanned []*token.Token) {
 		}
 	}
 	for i := len(expected); i < len(scanned); i++ {
-		fmt.Fprintf(tw, "\t%s", scanned[i])
+		fmt.Fprintf(tw, "\t%s\n", scanned[i])
 	}
 }
 

@@ -191,6 +191,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.numeric()
 	} else if len(rs) == 2 && rs[0] == '-' && rs[1] == '-' {
 		return l.sqlComment()
+	} else if len(rs) == 2 && rs[0] == '/' && rs[1] == '*' {
+		return l.cComment()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -454,6 +456,28 @@ func (l *Lexer) sqlComment() *token.Token {
 		}
 	}
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindSQLComment)
+}
+
+// cComment scans a C-style comment.
+func (l *Lexer) cComment() *token.Token {
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	l.r.readRune()
+	for r, eof := l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r != '*' {
+			continue
+		}
+
+		pr, peof := l.r.peekRune()
+		if peof {
+			break
+		}
+		if pr == '/' {
+			l.r.readRune()
+			break
+		}
+	}
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindCComment)
 }
 
 // operator scans an operator.
