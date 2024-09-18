@@ -726,11 +726,6 @@ func (l *Lexer) isHexadecimal(r rune) bool {
 	return l.isNumeric(r) || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
-// isSpecial reports whether the rune is special (with respect to the SQLite SQL dialect).
-func (l *Lexer) isSpecial(r rune) bool {
-	return !l.isWhiteSpace(r) && !l.isAlphabetic(r) && !l.isNumeric(r)
-}
-
 // reader reads from the code.
 type reader struct {
 	// code is the code to be read.
