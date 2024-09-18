@@ -128,6 +128,8 @@ func TestLexer(t *testing.T) {
 		{code: "|", tokens: parseTokens(`<"|", Pipe> <EOF>`)},
 		{code: "||", tokens: parseTokens(`<"||", PipePipe> <EOF>`)},
 		{code: ".", tokens: parseTokens(`<".", Dot> <EOF>`)},
+		{code: "\x00", tokens: parseTokens(`<"\x00: invalid character", Error> <EOF>`)},
+		{code: "^", tokens: parseTokens(`<"^: invalid character", Error> <EOF>`)},
 	}
 
 	for _, c := range cases {

@@ -205,7 +205,7 @@ func (l *Lexer) Next() *token.Token {
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
-		panic("not implemented yet")
+		return l.invalidCharacter()
 	}
 }
 
@@ -532,7 +532,7 @@ func (l *Lexer) colonVariable() *token.Token {
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindColonVariable)
 }
 
-// atVariable scans a at variable.
+// atVariable scans an at variable.
 func (l *Lexer) atVariable() *token.Token {
 	var r rune
 	var eof bool
@@ -691,6 +691,14 @@ func (l *Lexer) operator() *token.Token {
 	}
 	lexeme := l.r.slice(offsetStart, l.r.getOffset())
 	return token.New(lexeme, kind)
+}
+
+// invalidCharacter scans an invalid character.
+func (l *Lexer) invalidCharacter() *token.Token {
+	startOffset := l.r.getOffset()
+	l.r.readRune()
+	err := string(l.r.slice(startOffset, l.r.getOffset())) + ": invalid character"
+	return token.New([]byte(err), token.KindError)
 }
 
 // isWhiteSpace reports whether the rune is white space (with respect to the SQLite SQL dialect).
