@@ -3,10 +3,11 @@ package lexer
 
 import (
 	"errors"
-	"mel/sqlite/v3_46_1/token"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
 )
 
 // keywords is a map from the keywords of the language to the kind of the keyword token.

@@ -3,12 +3,13 @@ package lexer
 import (
 	"bytes"
 	"fmt"
-	"mel/sqlite/v3_46_1/token"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"text/tabwriter"
+
+	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
 )
 
 // TestLexer tests the lexer.
