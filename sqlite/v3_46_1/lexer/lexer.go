@@ -198,6 +198,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.questionVariable()
 	} else if rs[0] == ':' {
 		return l.colonVariable()
+	} else if rs[0] == '@' {
+		return l.atVariable()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -515,6 +517,7 @@ func (l *Lexer) colonVariable() *token.Token {
 		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after colon"
 		return token.New([]byte(err), token.KindError)
 	}
+
 	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
 		if !l.isAlphanumeric(r) && r != '$' {
 			break
@@ -523,7 +526,34 @@ func (l *Lexer) colonVariable() *token.Token {
 	if !eof {
 		l.r.unreadRune()
 	}
+
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindColonVariable)
+}
+
+// atVariable scans a at variable.
+func (l *Lexer) atVariable() *token.Token {
+	var r rune
+	var eof bool
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	if r, eof = l.r.peekRune(); eof {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
+		return token.New([]byte(err), token.KindError)
+	} else if !l.isAlphabetic(r) {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after at"
+		return token.New([]byte(err), token.KindError)
+	}
+
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if !l.isAlphanumeric(r) && r != '$' {
+			break
+		}
+	}
+	if !eof {
+		l.r.unreadRune()
+	}
+
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindAtVariable)
 }
 
 // operator scans an operator.
