@@ -88,6 +88,19 @@ func TestLexer(t *testing.T) {
 		{code: "@select *", tokens: parseTokens(`<"@select", AtVariable> <"*", Asterisk> <EOF>`)},
 		{code: "@", tokens: parseTokens(`<"@: unexpected EOF", Error> <EOF>`)},
 		{code: "@2", tokens: parseTokens(`<"@: invalid character after at", Error> <"2", Numeric> <EOF>`)},
+		{code: "$table", tokens: parseTokens(`<"$table", DollarVariable> <EOF>`)},
+		{code: "$tab$le", tokens: parseTokens(`<"$tab$le", DollarVariable> <EOF>`)},
+		{code: "$_tab$20", tokens: parseTokens(`<"$_tab$20", DollarVariable> <EOF>`)},
+		{code: "$select *", tokens: parseTokens(`<"$select", DollarVariable> <"*", Asterisk> <EOF>`)},
+		{code: "$", tokens: parseTokens(`<"$: unexpected EOF", Error> <EOF>`)},
+		{code: "$2", tokens: parseTokens(`<"$: invalid character after dollar-sign", Error> <"2", Numeric> <EOF>`)},
+		{code: "$tab::le", tokens: parseTokens(`<"$tab::le", DollarVariable> <EOF>`)},
+		{code: "$tab:le", tokens: parseTokens(`<"$tab", DollarVariable> <":le", ColonVariable> <EOF>`)},
+		{code: "$tab::le::(variable)", tokens: parseTokens(`<"$tab::le::(variable)", DollarVariable> <EOF>`)},
+		{code: "$tab::le::()", tokens: parseTokens(`<"$tab::le::()", DollarVariable> <EOF>`)},
+		{code: "$tab::le::(variable", tokens: parseTokens(`<"$tab::le::(variable: unexpected EOF", Error> <EOF>`)},
+		{code: "$tab::le::(variable)(ok)",
+			tokens: parseTokens(`<"$tab::le::(variable)", DollarVariable> <"(", LeftParen> <"ok", Identifier> <")", RightParen> <EOF>`)},
 		{code: "-", tokens: parseTokens(`<"-", Minus> <EOF>`)},
 		{code: "(", tokens: parseTokens(`<"(", LeftParen> <EOF>`)},
 		{code: ")", tokens: parseTokens(`<")", RightParen> <EOF>`)},
@@ -164,7 +177,7 @@ func printTokens(b *strings.Builder, expected, scanned []*token.Token) {
 	// we use a strings.Builder because it dont returns errors like the more general io.Writer.
 	tw := tabwriter.NewWriter(b, 1, 1, 1, ' ', 0)
 	defer tw.Flush()
-	fmt.Fprintln(tw, "expected\tscanned")
+	fmt.Fprintln(tw, "\nexpected\tscanned")
 	for i := range expected {
 		fmt.Fprintf(tw, "%s\t", expected[i])
 		if i < len(scanned) {

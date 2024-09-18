@@ -171,6 +171,7 @@ const (
 	KindQuestionVariable
 	KindColonVariable
 	KindAtVariable
+	KindDollarVariable
 	KindMinus
 	KindLeftParen
 	KindRightParen
@@ -239,8 +240,8 @@ var kindString = []string{
 	"Row", "Rows", "Savepoint", "Select", "Set", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction",
 	"Trigger", "Unbounded", "Union", "Unique", "Update", "Using", "Vacuum", "Values", "View", "Virtual", "When",
 	"Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "SQLComment", "CComment",
-	"QuestionVariable", "ColonVariable", "AtVariable", "Minus", "LeftParen", "RightParen", "Semicolon", "Plus",
-	"Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan", "LessThanLessThan",
+	"QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "LeftParen", "RightParen", "Semicolon",
+	"Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan", "LessThanLessThan",
 	"LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand",
 	"Tilde", "Pipe", "PipePipe", "Dot", "Error", "EOF",
 }

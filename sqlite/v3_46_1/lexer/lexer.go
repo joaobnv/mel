@@ -200,6 +200,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.colonVariable()
 	} else if rs[0] == '@' {
 		return l.atVariable()
+	} else if rs[0] == '$' {
+		return l.dollarVariable()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -554,6 +556,50 @@ func (l *Lexer) atVariable() *token.Token {
 	}
 
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindAtVariable)
+}
+
+// dollarVariable scans a dollar variable.
+func (l *Lexer) dollarVariable() *token.Token {
+	var r rune
+	var eof bool
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	if r, eof = l.r.peekRune(); eof {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
+		return token.New([]byte(err), token.KindError)
+	} else if !l.isAlphabetic(r) {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after dollar-sign"
+		return token.New([]byte(err), token.KindError)
+	}
+
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if r == ':' {
+			pr, peof := l.r.peekRune()
+			if peof || pr != ':' {
+				l.r.unreadRune()
+				break
+			}
+			l.r.readRune()
+		} else if r == '(' {
+			var r2 rune
+			var eof2 bool
+			for r2, eof2 = l.r.readRune(); !eof2; r2, eof2 = l.r.readRune() {
+				if r2 == ')' {
+					break
+				}
+			}
+			if eof2 {
+				err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
+				return token.New([]byte(err), token.KindError)
+			}
+			break
+		} else if !l.isAlphanumeric(r) && r != '$' {
+			l.r.unreadRune()
+			break
+		}
+	}
+
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindDollarVariable)
 }
 
 // operator scans an operator.
