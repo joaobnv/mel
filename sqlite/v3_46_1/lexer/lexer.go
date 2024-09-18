@@ -195,6 +195,8 @@ func (l *Lexer) Next() *token.Token {
 		return l.cComment()
 	} else if rs[0] == '?' {
 		return l.questionVariable()
+	} else if rs[0] == ':' {
+		return l.colonVariable()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
 	} else {
@@ -497,6 +499,30 @@ func (l *Lexer) questionVariable() *token.Token {
 		l.r.unreadRune()
 	}
 	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindQuestionVariable)
+}
+
+// colonVariable scans a colon variable.
+func (l *Lexer) colonVariable() *token.Token {
+	var r rune
+	var eof bool
+	offsetStart := l.r.getOffset()
+	l.r.readRune()
+	if r, eof = l.r.peekRune(); eof {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
+		return token.New([]byte(err), token.KindError)
+	} else if !l.isAlphabetic(r) {
+		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after colon"
+		return token.New([]byte(err), token.KindError)
+	}
+	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+		if !l.isAlphanumeric(r) && r != '$' {
+			break
+		}
+	}
+	if !eof {
+		l.r.unreadRune()
+	}
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindColonVariable)
 }
 
 // operator scans an operator.
