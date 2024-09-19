@@ -19,8 +19,8 @@ func TestLexer(t *testing.T) {
 		tokens []*token.Token
 	}{
 		{code: "", tokens: parseTokens(`<EOF>`)},
-		{code: "\t\n\x0C\x0D\x20", tokens: parseTokens(`<EOF>`)},
-		{code: "abc ", tokens: parseTokens(`<"abc", Identifier> <EOF>`)},
+		{code: "\t\n\x0C\x0D\x20", tokens: parseTokens(`<"\t\n\x0C\x0D\x20", WhiteSpace> <EOF>`)},
+		{code: "abc ", tokens: parseTokens(`<"abc", Identifier> <" ", WhiteSpace> <EOF>`)},
 		{code: "TABLE", tokens: parseTokens(`<"TABLE", Table> <EOF>`)},
 		{code: "\"TABLE\"", tokens: parseTokens(`<"\"TABLE\"", Identifier> <EOF>`)},
 		{code: "\"TAB\"\"LE\"", tokens: parseTokens(`<"\"TAB\"\"LE\"", Identifier> <EOF>`)},
@@ -34,6 +34,7 @@ func TestLexer(t *testing.T) {
 		{code: "'TAB''LE'", tokens: parseTokens("<\"'TAB''LE'\", String> <EOF>")},
 		{code: "X'CAFE'", tokens: parseTokens("<\"X'CAFE'\", Blob> <EOF>")},
 		{code: "x'cafe'", tokens: parseTokens("<\"x'cafe'\", Blob> <EOF>")},
+		{code: "x'cafe", tokens: parseTokens("<\"x'cafe: unexpected EOF\", Error> <EOF>")},
 		// the lexer doesn't care if the number of hexadecimal runes is even
 		{code: "x'C0FEE'", tokens: parseTokens("<\"x'C0FEE'\", Blob> <EOF>")},
 		{code: "x'CAR'", tokens: parseTokens("<\"x'CAR: a blob must contain only hexadecimal characters\", Error> <\"': unexpected EOF\", Error> <EOF>")},
@@ -65,13 +66,13 @@ func TestLexer(t *testing.T) {
 		{code: "0x0_F_", tokens: parseTokens(`<"0x0_F", Numeric> <"_", Identifier> <EOF>`)},
 		{code: "0x0_FQ", tokens: parseTokens(`<"0x0_F", Numeric> <"Q", Identifier> <EOF>`)},
 		{code: "-- comment", tokens: parseTokens(`<"-- comment", SQLComment> <EOF>`)},
-		{code: "-- comment\ntable", tokens: parseTokens(`<"-- comment", SQLComment> <"table", Table> <EOF>`)},
+		{code: "-- comment\ntable", tokens: parseTokens(`<"-- comment", SQLComment> <"\n", WhiteSpace> <"table", Table> <EOF>`)},
 		{code: "/**/", tokens: parseTokens(`<"/**/", CComment> <EOF>`)},
-		{code: "/*****/ table", tokens: parseTokens(`<"/*****/", CComment> <"table", Table> <EOF>`)},
+		{code: "/*****/ table", tokens: parseTokens(`<"/*****/", CComment> <" ", WhiteSpace> <"table", Table> <EOF>`)},
 		{code: "/**", tokens: parseTokens(`<"/**", CComment> <EOF>`)},
 		{code: "/* comment\n table", tokens: parseTokens(`<"/* comment\n table", CComment> <EOF>`)},
-		{code: "/* comment*/ table", tokens: parseTokens(`<"/* comment*/", CComment> <"table", Table> <EOF>`)},
-		{code: "/* comment* **/ table", tokens: parseTokens(`<"/* comment* **/", CComment> <"table", Table> <EOF>`)},
+		{code: "/* comment*/ table", tokens: parseTokens(`<"/* comment*/", CComment> <" ", WhiteSpace> <"table", Table> <EOF>`)},
+		{code: "/* comment* **/ table", tokens: parseTokens(`<"/* comment* **/", CComment> <" ", WhiteSpace> <"table", Table> <EOF>`)},
 		{code: "?", tokens: parseTokens(`<"?", QuestionVariable> <EOF>`)},
 		{code: "?0", tokens: parseTokens(`<"?0", QuestionVariable> <EOF>`)},
 		{code: "?90", tokens: parseTokens(`<"?90", QuestionVariable> <EOF>`)},
@@ -79,19 +80,19 @@ func TestLexer(t *testing.T) {
 		{code: ":table", tokens: parseTokens(`<":table", ColonVariable> <EOF>`)},
 		{code: ":tab$le", tokens: parseTokens(`<":tab$le", ColonVariable> <EOF>`)},
 		{code: ":_tab$20", tokens: parseTokens(`<":_tab$20", ColonVariable> <EOF>`)},
-		{code: ":select *", tokens: parseTokens(`<":select", ColonVariable> <"*", Asterisk> <EOF>`)},
+		{code: ":select *", tokens: parseTokens(`<":select", ColonVariable> <" ", WhiteSpace> <"*", Asterisk> <EOF>`)},
 		{code: ":", tokens: parseTokens(`<":: unexpected EOF", Error> <EOF>`)},
 		{code: ":2", tokens: parseTokens(`<":: invalid character after colon", Error> <"2", Numeric> <EOF>`)},
 		{code: "@table", tokens: parseTokens(`<"@table", AtVariable> <EOF>`)},
 		{code: "@tab$le", tokens: parseTokens(`<"@tab$le", AtVariable> <EOF>`)},
 		{code: "@_tab$20", tokens: parseTokens(`<"@_tab$20", AtVariable> <EOF>`)},
-		{code: "@select *", tokens: parseTokens(`<"@select", AtVariable> <"*", Asterisk> <EOF>`)},
+		{code: "@select *", tokens: parseTokens(`<"@select", AtVariable> <" ", WhiteSpace> <"*", Asterisk> <EOF>`)},
 		{code: "@", tokens: parseTokens(`<"@: unexpected EOF", Error> <EOF>`)},
 		{code: "@2", tokens: parseTokens(`<"@: invalid character after at", Error> <"2", Numeric> <EOF>`)},
 		{code: "$table", tokens: parseTokens(`<"$table", DollarVariable> <EOF>`)},
 		{code: "$tab$le", tokens: parseTokens(`<"$tab$le", DollarVariable> <EOF>`)},
 		{code: "$_tab$20", tokens: parseTokens(`<"$_tab$20", DollarVariable> <EOF>`)},
-		{code: "$select *", tokens: parseTokens(`<"$select", DollarVariable> <"*", Asterisk> <EOF>`)},
+		{code: "$select *", tokens: parseTokens(`<"$select", DollarVariable> <" ", WhiteSpace> <"*", Asterisk> <EOF>`)},
 		{code: "$", tokens: parseTokens(`<"$: unexpected EOF", Error> <EOF>`)},
 		{code: "$2", tokens: parseTokens(`<"$: invalid character after dollar-sign", Error> <"2", Numeric> <EOF>`)},
 		{code: "$tab::le", tokens: parseTokens(`<"$tab::le", DollarVariable> <EOF>`)},
@@ -108,7 +109,8 @@ func TestLexer(t *testing.T) {
 		{code: "+", tokens: parseTokens(`<"+", Plus> <EOF>`)},
 		{code: "*", tokens: parseTokens(`<"*", Asterisk> <EOF>`)},
 		{code: "/", tokens: parseTokens(`<"/", Slash> <EOF>`)},
-		{code: "/ * */", tokens: parseTokens(`<"/", Slash> <"*", Asterisk> <"*", Asterisk> <"/", Slash> <EOF>`)},
+		{code: "/ * */",
+			tokens: parseTokens(`<"/", Slash> <" ", WhiteSpace> <"*", Asterisk> <" ", WhiteSpace> <"*", Asterisk> <"/", Slash> <EOF>`)},
 		{code: "%", tokens: parseTokens(`<"%", Percent> <EOF>`)},
 		{code: "=", tokens: parseTokens(`<"=", Equal> <EOF>`)},
 		{code: "==", tokens: parseTokens(`<"==", EqualEqual> <EOF>`)},
@@ -209,6 +211,42 @@ func TestReaderReadPanic(t *testing.T) {
 	data := []byte{0xFF, 0xFF, 0xFF, 0xFF}
 	r := newReader(data)
 	r.readRune()
+}
+
+// TestReaderPeekPanic tests the case where the reader peeks from a invalid UTF-8 encoded byte slice.
+func TestReaderPeekPanic(t *testing.T) {
+	defer func() {
+		resultPanic := recover()
+		if resultPanic == nil {
+			t.Errorf("not panic")
+			return
+		}
+		err := resultPanic.(error)
+		if err.Error() != "utf-8 encoding invalid" {
+			t.Errorf("invalid error message: %s", err)
+		}
+	}()
+	data := []byte{0xFF, 0xFF, 0xFF, 0xFF}
+	r := newReader(data)
+	r.peekRune()
+}
+
+// TestReaderPeekPanic tests the case where the reader peekNRunes reads from a invalid UTF-8 encoded byte slice.
+func TestReaderPeekNPanic(t *testing.T) {
+	defer func() {
+		resultPanic := recover()
+		if resultPanic == nil {
+			t.Errorf("not panic")
+			return
+		}
+		err := resultPanic.(error)
+		if err.Error() != "utf-8 encoding invalid" {
+			t.Errorf("invalid error message: %s", err)
+		}
+	}()
+	data := []byte{0xFF, 0xFF, 0xFF, 0xFF}
+	r := newReader(data)
+	r.peekNRunes(1)
 }
 
 // TestReaderUnreadOnStart tests the case where the read is at the start and we try a unreadRune.

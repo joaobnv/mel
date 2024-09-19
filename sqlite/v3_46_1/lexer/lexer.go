@@ -174,7 +174,6 @@ func New(code []byte) *Lexer {
 
 // Next returns the next token.
 func (l *Lexer) Next() *token.Token {
-	l.discardWhiteSpace()
 	rs, _ := l.r.peekNRunes(2)
 	if len(rs) == 0 {
 		return token.New(nil, token.KindEOF)
@@ -204,21 +203,10 @@ func (l *Lexer) Next() *token.Token {
 		return l.dollarVariable()
 	} else if strings.ContainsRune("-();+*/%=<>!,&~|.", rs[0]) {
 		return l.operator()
+	} else if l.isWhiteSpace(rs[0]) {
+		return l.whiteSpace()
 	} else {
 		return l.invalidCharacter()
-	}
-}
-
-// discardWhiteSpace reads and discards white space.
-func (l *Lexer) discardWhiteSpace() {
-	var (
-		eof bool
-		r   rune
-	)
-	for r, eof = l.r.readRune(); !eof && l.isWhiteSpace(r); r, eof = l.r.readRune() {
-	}
-	if !eof {
-		l.r.unreadRune()
 	}
 }
 
@@ -691,6 +679,21 @@ func (l *Lexer) operator() *token.Token {
 	}
 	lexeme := l.r.slice(offsetStart, l.r.getOffset())
 	return token.New(lexeme, kind)
+}
+
+// whiteSpace scans white spaces.
+func (l *Lexer) whiteSpace() *token.Token {
+	var (
+		eof bool
+		r   rune
+	)
+	offsetStart := l.r.getOffset()
+	for r, eof = l.r.readRune(); !eof && l.isWhiteSpace(r); r, eof = l.r.readRune() {
+	}
+	if !eof {
+		l.r.unreadRune()
+	}
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindWhiteSpace)
 }
 
 // invalidCharacter scans an invalid character.
