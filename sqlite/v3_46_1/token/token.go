@@ -197,7 +197,10 @@ const (
 	KindPipePipe
 	KindDot
 	KindWhiteSpace
-	KindError
+	KindErrorUnexpectedEOF
+	KindErrorBlobNotHexadecimal
+	KindErrorInvalidCharacter
+	KindErrorInvalidCharacterAfter
 	KindEOF
 )
 
@@ -244,7 +247,8 @@ var kindString = []string{
 	"QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "LeftParen", "RightParen", "Semicolon",
 	"Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan", "LessThanLessThan",
 	"LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand",
-	"Tilde", "Pipe", "PipePipe", "Dot", "WhiteSpace", "Error", "EOF",
+	"Tilde", "Pipe", "PipePipe", "Dot", "WhiteSpace", "ErrorUnexpectedEOF", "ErrorBlobNotHexadecimal", "ErrorInvalidCharacter",
+	"ErrorInvalidCharacterAfter", "EOF",
 }
 
 // Token is a token from the code.

@@ -224,15 +224,12 @@ func (l *Lexer) blob() *token.Token {
 			break
 		}
 		if !l.isHexadecimal(r) {
-			lexeme := l.r.slice(offsetStart, l.r.getOffset())
-			err := string(lexeme) + ": a blob must contain only hexadecimal characters"
-			return token.New([]byte(err), token.KindError)
+			return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorBlobNotHexadecimal)
 		}
 	}
 	lexeme := l.r.slice(offsetStart, l.r.getOffset())
 	if eof {
-		err := string(lexeme) + ": unexpected EOF"
-		return token.New([]byte(err), token.KindError)
+		return token.New(lexeme, token.KindErrorUnexpectedEOF)
 	}
 	return token.New(lexeme, token.KindBlob)
 }
@@ -268,8 +265,7 @@ func (l *Lexer) word() *token.Token {
 		}
 		lexeme := l.r.slice(offsetStart, l.r.getOffset())
 		if eof {
-			err := string(lexeme) + ": unexpected EOF"
-			return token.New([]byte(err), token.KindError)
+			return token.New(lexeme, token.KindErrorUnexpectedEOF)
 		}
 		return token.New(lexeme, token.KindIdentifier)
 	} else if r == '[' {
@@ -281,8 +277,7 @@ func (l *Lexer) word() *token.Token {
 		}
 		lexeme := l.r.slice(offsetStart, l.r.getOffset())
 		if eof {
-			err := string(lexeme) + ": unexpected EOF"
-			return token.New([]byte(err), token.KindError)
+			return token.New(lexeme, token.KindErrorUnexpectedEOF)
 		}
 		return token.New(lexeme, token.KindIdentifier)
 	} else { // r == '`'
@@ -297,8 +292,7 @@ func (l *Lexer) word() *token.Token {
 		}
 		lexeme := l.r.slice(offsetStart, l.r.getOffset())
 		if eof {
-			err := string(lexeme) + ": unexpected EOF"
-			return token.New([]byte(err), token.KindError)
+			return token.New(lexeme, token.KindErrorUnexpectedEOF)
 		}
 		return token.New(lexeme, token.KindIdentifier)
 	}
@@ -322,8 +316,7 @@ func (l *Lexer) string() *token.Token {
 	}
 	lexeme := l.r.slice(offsetStart, l.r.getOffset())
 	if eof {
-		err := string(lexeme) + ": unexpected EOF"
-		return token.New([]byte(err), token.KindError)
+		return token.New(lexeme, token.KindErrorUnexpectedEOF)
 	}
 	return token.New(lexeme, token.KindString)
 }
@@ -501,11 +494,9 @@ func (l *Lexer) colonVariable() *token.Token {
 	offsetStart := l.r.getOffset()
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
 	} else if !l.isAlphabetic(r) {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after colon"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
 	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
@@ -527,11 +518,9 @@ func (l *Lexer) atVariable() *token.Token {
 	offsetStart := l.r.getOffset()
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
 	} else if !l.isAlphabetic(r) {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after at"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
 	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
@@ -553,11 +542,9 @@ func (l *Lexer) dollarVariable() *token.Token {
 	offsetStart := l.r.getOffset()
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
 	} else if !l.isAlphabetic(r) {
-		err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": invalid character after dollar-sign"
-		return token.New([]byte(err), token.KindError)
+		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
 	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
@@ -577,8 +564,7 @@ func (l *Lexer) dollarVariable() *token.Token {
 				}
 			}
 			if eof2 {
-				err := string(l.r.slice(offsetStart, l.r.getOffset())) + ": unexpected EOF"
-				return token.New([]byte(err), token.KindError)
+				return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
 			}
 			break
 		} else if !l.isAlphanumeric(r) && r != '$' {
@@ -656,17 +642,13 @@ func (l *Lexer) operator() *token.Token {
 	case '!':
 		r, eof := l.r.readRune()
 		if eof {
-			lexeme := l.r.slice(offsetStart, l.r.getOffset())
-			err := string(lexeme) + ": unexpected EOF"
-			return token.New([]byte(err), token.KindError)
+			return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
 		}
 		if r == '=' {
 			kind = token.KindExclamationEqual
 		} else {
 			l.r.unreadRune()
-			lexeme := l.r.slice(offsetStart, l.r.getOffset())
-			err := string(lexeme) + ": unexpected character"
-			return token.New([]byte(err), token.KindError)
+			return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 		}
 	default: // r == '|'
 		r, eof := l.r.peekRune()
@@ -700,8 +682,7 @@ func (l *Lexer) whiteSpace() *token.Token {
 func (l *Lexer) invalidCharacter() *token.Token {
 	startOffset := l.r.getOffset()
 	l.r.readRune()
-	err := string(l.r.slice(startOffset, l.r.getOffset())) + ": invalid character"
-	return token.New([]byte(err), token.KindError)
+	return token.New(l.r.slice(startOffset, l.r.getOffset()), token.KindErrorInvalidCharacter)
 }
 
 // isWhiteSpace reports whether the rune is white space (with respect to the SQLite SQL dialect).
