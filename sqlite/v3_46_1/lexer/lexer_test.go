@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -162,20 +163,6 @@ func TestLexer(t *testing.T) {
 	}
 }
 
-// parseTokens unmarshalls tkens from code.
-func parseTokens(code string) (result []*token.Token) {
-	re := regexp.MustCompile(`<(?:("(?:[^\\]|\\"|\\[^"])*?"),\s?)?([a-zA-Z]+)>`)
-	matches := re.FindAllString(code, -1)
-	for i := range matches {
-		var tok token.Token
-		if err := tok.UnmarshalText([]byte(matches[i])); err != nil {
-			panic(fmt.Errorf("\"%s\": %w", matches[i], err))
-		}
-		result = append(result, &tok)
-	}
-	return
-}
-
 // printTokens writes the tokens to b in tabular form.
 func printTokens(b *strings.Builder, expected, scanned []*token.Token) {
 	// we use a strings.Builder because it dont returns errors like the more general io.Writer.
@@ -304,4 +291,220 @@ func TestReaderUnreadPanic(t *testing.T) {
 	r.readRune()
 	data[0] = 0b10111111
 	r.unreadRune()
+}
+
+// parseTokens unmarshalls tokens from code.
+func parseTokens(code string) (result []*token.Token) {
+	re := regexp.MustCompile(`<(?:("(?:[^\\]|\\"|\\[^"])*?"),\s?)?([a-zA-Z]+)>`)
+	matches := re.FindAllStringSubmatch(code, -1)
+	for i := range matches {
+		kind, ok := kinds[matches[i][2]]
+		if !ok {
+			panic(fmt.Errorf("kind not exported by package token: %s", matches[i][2]))
+		}
+
+		var lex []byte
+		if matches[i][1] != "" {
+			lexStr, err := strconv.Unquote(matches[i][1])
+			if err != nil {
+				panic(err)
+			}
+			lex = []byte(lexStr)
+		}
+
+		result = append(result, token.New(lex, kind))
+	}
+	return
+}
+
+// kinds is a map string representations of token kind and the corresponding kind. It contains only kinds
+// exported by the package token.
+var kinds = map[string]token.Kind{
+	"Abort":                      token.KindAbort,
+	"Action":                     token.KindAction,
+	"Add":                        token.KindAdd,
+	"After":                      token.KindAfter,
+	"All":                        token.KindAll,
+	"Alter":                      token.KindAlter,
+	"Always":                     token.KindAlways,
+	"Analyze":                    token.KindAnalyze,
+	"And":                        token.KindAnd,
+	"As":                         token.KindAs,
+	"Asc":                        token.KindAsc,
+	"Attach":                     token.KindAttach,
+	"Autoincrement":              token.KindAutoincrement,
+	"Before":                     token.KindBefore,
+	"Begin":                      token.KindBegin,
+	"Between":                    token.KindBetween,
+	"By":                         token.KindBy,
+	"Cascade":                    token.KindCascade,
+	"Case":                       token.KindCase,
+	"Cast":                       token.KindCast,
+	"Check":                      token.KindCheck,
+	"Collate":                    token.KindCollate,
+	"Column":                     token.KindColumn,
+	"Commit":                     token.KindCommit,
+	"Conflict":                   token.KindConflict,
+	"Constraint":                 token.KindConstraint,
+	"Create":                     token.KindCreate,
+	"Cross":                      token.KindCross,
+	"Current":                    token.KindCurrent,
+	"CurrentDate":                token.KindCurrentDate,
+	"CurrentTime":                token.KindCurrentTime,
+	"CurrentTimestamp":           token.KindCurrentTimestamp,
+	"Database":                   token.KindDatabase,
+	"Default":                    token.KindDefault,
+	"Deferrable":                 token.KindDeferrable,
+	"Deferred":                   token.KindDeferred,
+	"Delete":                     token.KindDelete,
+	"Desc":                       token.KindDesc,
+	"Detach":                     token.KindDetach,
+	"Distinct":                   token.KindDistinct,
+	"Do":                         token.KindDo,
+	"Drop":                       token.KindDrop,
+	"Each":                       token.KindEach,
+	"Else":                       token.KindElse,
+	"End":                        token.KindEnd,
+	"Escape":                     token.KindEscape,
+	"Except":                     token.KindExcept,
+	"Exclude":                    token.KindExclude,
+	"Exclusive":                  token.KindExclusive,
+	"Exists":                     token.KindExists,
+	"Explain":                    token.KindExplain,
+	"Fail":                       token.KindFail,
+	"Filter":                     token.KindFilter,
+	"First":                      token.KindFirst,
+	"Following":                  token.KindFollowing,
+	"For":                        token.KindFor,
+	"Foreign":                    token.KindForeign,
+	"From":                       token.KindFrom,
+	"Full":                       token.KindFull,
+	"Generated":                  token.KindGenerated,
+	"Glob":                       token.KindGlob,
+	"Group":                      token.KindGroup,
+	"Groups":                     token.KindGroups,
+	"Having":                     token.KindHaving,
+	"If":                         token.KindIf,
+	"Ignore":                     token.KindIgnore,
+	"Immediate":                  token.KindImmediate,
+	"In":                         token.KindIn,
+	"Index":                      token.KindIndex,
+	"Indexed":                    token.KindIndexed,
+	"Initially":                  token.KindInitially,
+	"Inner":                      token.KindInner,
+	"Insert":                     token.KindInsert,
+	"Instead":                    token.KindInstead,
+	"Intersect":                  token.KindIntersect,
+	"Into":                       token.KindInto,
+	"Is":                         token.KindIs,
+	"Isnull":                     token.KindIsnull,
+	"Join":                       token.KindJoin,
+	"Key":                        token.KindKey,
+	"Last":                       token.KindLast,
+	"Left":                       token.KindLeft,
+	"Like":                       token.KindLike,
+	"Limit":                      token.KindLimit,
+	"Match":                      token.KindMatch,
+	"Materialized":               token.KindMaterialized,
+	"Natural":                    token.KindNatural,
+	"No":                         token.KindNo,
+	"Not":                        token.KindNot,
+	"Nothing":                    token.KindNothing,
+	"Notnull":                    token.KindNotnull,
+	"Null":                       token.KindNull,
+	"Nulls":                      token.KindNulls,
+	"Of":                         token.KindOf,
+	"Offset":                     token.KindOffset,
+	"On":                         token.KindOn,
+	"Or":                         token.KindOr,
+	"Order":                      token.KindOrder,
+	"Others":                     token.KindOthers,
+	"Outer":                      token.KindOuter,
+	"Over":                       token.KindOver,
+	"Partition":                  token.KindPartition,
+	"Plan":                       token.KindPlan,
+	"Pragma":                     token.KindPragma,
+	"Preceding":                  token.KindPreceding,
+	"Primary":                    token.KindPrimary,
+	"Query":                      token.KindQuery,
+	"Raise":                      token.KindRaise,
+	"Range":                      token.KindRange,
+	"Recursive":                  token.KindRecursive,
+	"References":                 token.KindReferences,
+	"Regexp":                     token.KindRegexp,
+	"Reindex":                    token.KindReindex,
+	"Release":                    token.KindRelease,
+	"Rename":                     token.KindRename,
+	"Replace":                    token.KindReplace,
+	"Restrict":                   token.KindRestrict,
+	"Returning":                  token.KindReturning,
+	"Right":                      token.KindRight,
+	"Rollback":                   token.KindRollback,
+	"Row":                        token.KindRow,
+	"Rows":                       token.KindRows,
+	"Savepoint":                  token.KindSavepoint,
+	"Select":                     token.KindSelect,
+	"Set":                        token.KindSet,
+	"Table":                      token.KindTable,
+	"Temp":                       token.KindTemp,
+	"Temporary":                  token.KindTemporary,
+	"Then":                       token.KindThen,
+	"Ties":                       token.KindTies,
+	"To":                         token.KindTo,
+	"Transaction":                token.KindTransaction,
+	"Trigger":                    token.KindTrigger,
+	"Unbounded":                  token.KindUnbounded,
+	"Union":                      token.KindUnion,
+	"Unique":                     token.KindUnique,
+	"Update":                     token.KindUpdate,
+	"Using":                      token.KindUsing,
+	"Vacuum":                     token.KindVacuum,
+	"Values":                     token.KindValues,
+	"View":                       token.KindView,
+	"Virtual":                    token.KindVirtual,
+	"When":                       token.KindWhen,
+	"Where":                      token.KindWhere,
+	"Window":                     token.KindWindow,
+	"With":                       token.KindWith,
+	"Without":                    token.KindWithout,
+	"Identifier":                 token.KindIdentifier,
+	"String":                     token.KindString,
+	"Blob":                       token.KindBlob,
+	"Numeric":                    token.KindNumeric,
+	"SQLComment":                 token.KindSQLComment,
+	"CComment":                   token.KindCComment,
+	"QuestionVariable":           token.KindQuestionVariable,
+	"ColonVariable":              token.KindColonVariable,
+	"AtVariable":                 token.KindAtVariable,
+	"DollarVariable":             token.KindDollarVariable,
+	"Minus":                      token.KindMinus,
+	"LeftParen":                  token.KindLeftParen,
+	"RightParen":                 token.KindRightParen,
+	"Semicolon":                  token.KindSemicolon,
+	"Plus":                       token.KindPlus,
+	"Asterisk":                   token.KindAsterisk,
+	"Slash":                      token.KindSlash,
+	"Percent":                    token.KindPercent,
+	"Equal":                      token.KindEqual,
+	"EqualEqual":                 token.KindEqualEqual,
+	"LessThanOrEqual":            token.KindLessThanOrEqual,
+	"LessThanGreaterThan":        token.KindLessThanGreaterThan,
+	"LessThanLessThan":           token.KindLessThanLessThan,
+	"LessThan":                   token.KindLessThan,
+	"GreaterThanEqual":           token.KindGreaterThanEqual,
+	"GreaterThanGreaterThan":     token.KindGreaterThanGreaterThan,
+	"GreaterThan":                token.KindGreaterThan,
+	"ExclamationEqual":           token.KindExclamationEqual,
+	"Comma":                      token.KindComma,
+	"Ampersand":                  token.KindAmpersand,
+	"Tilde":                      token.KindTilde,
+	"Pipe":                       token.KindPipe,
+	"PipePipe":                   token.KindPipePipe,
+	"Dot":                        token.KindDot,
+	"WhiteSpace":                 token.KindWhiteSpace,
+	"ErrorUnexpectedEOF":         token.KindErrorUnexpectedEOF,
+	"ErrorBlobNotHexadecimal":    token.KindErrorBlobNotHexadecimal,
+	"ErrorInvalidCharacter":      token.KindErrorInvalidCharacter,
+	"ErrorInvalidCharacterAfter": token.KindErrorInvalidCharacterAfter,
+	"EOF":                        token.KindEOF,
 }
