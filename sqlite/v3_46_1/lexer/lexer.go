@@ -137,6 +137,7 @@ var keywords = map[string]token.Kind{
 	"SAVEPOINT":         token.KindSavepoint,
 	"SELECT":            token.KindSelect,
 	"SET":               token.KindSet,
+	"STORED":            token.KindStored,
 	"TABLE":             token.KindTable,
 	"TEMP":              token.KindTemp,
 	"TEMPORARY":         token.KindTemporary,
