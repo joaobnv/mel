@@ -11,31 +11,98 @@ import (
 type Kind int
 
 const (
-	KindAddColumn Kind = iota
+	KindAdd Kind = iota
+	KindAddColumn
 	KindAlterTable
+	KindAnd
+	KindBetween
+	KindBindParameter
+	KindBitAnd
+	KindBitNot
+	KindBitOr
+	KindCase
+	KindCast
+	KindCollate
 	KindCollationName
 	KindColumnConstraint
 	KindColumnDefinition
 	KindColumnName
+	KindColumnReference
 	KindCommaList
+	KindConcatenate
 	KindConflictClause
 	KindConstraintName
+	KindDivide
 	KindDropColumn
-	KindErrorExpecting
-	KindErrorMissing
+	KindElse
+	KindEqual
+	KindErrorExpecting // is for when there was more than one possibility
+	KindErrorMessage
+	KindErrorMissing // is for when there was only one possibility
 	KindErrorUnexpectedEOF
+	KindExists
 	KindExplain
 	KindExplainQueryPlan
 	KindExpression
+	KindExtract1
+	KindExtract2
+	KindFilterClause
 	KindForeignKeyClause
+	KindFrameSpec
+	KindFrameSpecBetween
+	KindFunctionArguments
+	KindFunctionCall
+	KindFunctionName
+	KindGlob
+	KindGreaterThan
+	KindGreaterThanOrEqual
+	KindIn
+	KindIs
+	KindIsDistinctFrom
+	KindIsNot
+	KindIsNotDistinctFrom
+	KindIsNull
+	KindLeftShift
+	KindLessThan
+	KindLessThanOrEqual
+	KindLike
+	KindMatch
+	KindMod
+	KindMultiply
+	KindNegate
+	KindNot
+	KindNotBetween
+	KindNotEqual
+	KindNotGlob
+	KindNotIn
+	KindNotLike
+	KindNotMatch
+	KindNotnull
+	KindNotNull
+	KindNotRegexp
+	KindOr
+	KindOrderBy
+	KindOrderingTerm
+	KindOverClause
+	KindParenExpression
+	KindPartitionBy
+	KindPrefixPlus
+	KindRaise
+	KindRegexp
 	KindRenameColumn
 	KindRenameTo
+	KindRightShift
 	KindSchemaName
+	KindSelect
 	KindSkipped
 	KindSQLStatement
+	KindSubtract
+	KindTableFunctionName
 	KindTableName
 	KindToken
 	KindTypeName
+	KindWhen
+	KindWindowName
 )
 
 // String returns a string representation of k.
@@ -49,9 +116,15 @@ func (k Kind) String() string {
 // kindStrings contains the string representation of the kinds. Note that the value of a kind is the index of your string
 // representation.
 var kindStrings = []string{
-	"AddColumn", "AlterTable", "CollationName", "ColumnConstraint", "ColumnDefinition", "ColumnName", "CommaList", "ConflictClause", "ConstraintName",
-	"DropColumn", "ErrorExpecting", "ErrorMissing", "ErrorUnexpectedEOF", "Explain", "ExplainQueryPlan", "Expression", "ForeignKeyClause", "RenameColumn",
-	"RenameTo", "SchemaName", "Skipped", "SQLStatement", "TableName", "Token", "TypeName",
+	"Add", "AddColumn", "AlterTable", "And", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
+	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Concatenate", "ConflictClause", "ConstraintName", "Divide",
+	"DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan",
+	"Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
+	"FunctionName", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "IsNull", "LeftShift",
+	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike",
+	"NotMatch", "Notnull", "NotNull", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "Raise",
+	"Regexp", "RenameColumn", "RenameTo", "RightShift", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
+	"Token", "TypeName", "When", "WindowName",
 }
 
 // Construction is a construction in SQL grammar.

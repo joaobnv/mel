@@ -175,6 +175,8 @@ const (
 	kindAtVariable
 	kindDollarVariable
 	kindMinus
+	kindMinusGreaterThan
+	kindMinusGreaterThanGreaterThan
 	kindLeftParen
 	kindRightParen
 	kindSemicolon
@@ -228,10 +230,10 @@ var kindStrings = []string{
 	"Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback", "Row", "Rows", "Savepoint", "Select", "Set",
 	"Stored", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction", "Trigger", "Unbounded", "Union", "Unique", "Update", "Using",
 	"Vacuum", "Values", "View", "Virtual", "When", "Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "SQLComment",
-	"CComment", "QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "LeftParen", "RightParen", "Semicolon", "Plus",
-	"Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan", "LessThanLessThan", "LessThan", "GreaterThanEqual",
-	"GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand", "Tilde", "Pipe", "PipePipe", "Dot", "WhiteSpace", "ErrorUnexpectedEOF",
-	"ErrorBlobNotHexadecimal", "ErrorInvalidCharacter", "ErrorInvalidCharacterAfter", "EOF",
+	"CComment", "QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "MinusGreaterThan", "MinusGreaterThanGreaterThan",
+	"LeftParen", "RightParen", "Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
+	"LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand", "Tilde",
+	"Pipe", "PipePipe", "Dot", "WhiteSpace", "ErrorUnexpectedEOF", "ErrorBlobNotHexadecimal", "ErrorInvalidCharacter", "ErrorInvalidCharacterAfter", "EOF",
 }
 
 var (
@@ -384,44 +386,46 @@ var (
 	KindWith             Kind = kindWith
 	KindWithout          Kind = kindWithout
 	// end of keywords
-	KindIdentifier                 Kind = kindIdentifier
-	KindString                     Kind = kindString
-	KindBlob                       Kind = kindBlob
-	KindNumeric                    Kind = kindNumeric
-	KindSQLComment                 Kind = kindSQLComment
-	KindCComment                   Kind = kindCComment
-	KindQuestionVariable           Kind = kindQuestionVariable
-	KindColonVariable              Kind = kindColonVariable
-	KindAtVariable                 Kind = kindAtVariable
-	KindDollarVariable             Kind = kindDollarVariable
-	KindMinus                      Kind = kindMinus
-	KindLeftParen                  Kind = kindLeftParen
-	KindRightParen                 Kind = kindRightParen
-	KindSemicolon                  Kind = kindSemicolon
-	KindPlus                       Kind = kindPlus
-	KindAsterisk                   Kind = kindAsterisk
-	KindSlash                      Kind = kindSlash
-	KindPercent                    Kind = kindPercent
-	KindEqual                      Kind = kindEqual
-	KindEqualEqual                 Kind = kindEqualEqual
-	KindLessThanOrEqual            Kind = kindLessThanOrEqual
-	KindLessThanGreaterThan        Kind = kindLessThanGreaterThan
-	KindLessThanLessThan           Kind = kindLessThanLessThan
-	KindLessThan                   Kind = kindLessThan
-	KindGreaterThanEqual           Kind = kindGreaterThanEqual
-	KindGreaterThanGreaterThan     Kind = kindGreaterThanGreaterThan
-	KindGreaterThan                Kind = kindGreaterThan
-	KindExclamationEqual           Kind = kindExclamationEqual
-	KindComma                      Kind = kindComma
-	KindAmpersand                  Kind = kindAmpersand
-	KindTilde                      Kind = kindTilde
-	KindPipe                       Kind = kindPipe
-	KindPipePipe                   Kind = kindPipePipe
-	KindDot                        Kind = kindDot
-	KindWhiteSpace                 Kind = kindWhiteSpace
-	KindErrorUnexpectedEOF         Kind = kindErrorUnexpectedEOF
-	KindErrorBlobNotHexadecimal    Kind = kindErrorBlobNotHexadecimal
-	KindErrorInvalidCharacter      Kind = kindErrorInvalidCharacter
-	KindErrorInvalidCharacterAfter Kind = kindErrorInvalidCharacterAfter
-	KindEOF                        Kind = kindEOF
+	KindIdentifier                  Kind = kindIdentifier
+	KindString                      Kind = kindString
+	KindBlob                        Kind = kindBlob
+	KindNumeric                     Kind = kindNumeric
+	KindSQLComment                  Kind = kindSQLComment
+	KindCComment                    Kind = kindCComment
+	KindQuestionVariable            Kind = kindQuestionVariable
+	KindColonVariable               Kind = kindColonVariable
+	KindAtVariable                  Kind = kindAtVariable
+	KindDollarVariable              Kind = kindDollarVariable
+	KindMinus                       Kind = kindMinus
+	KindMinusGreaterThan            kind = kindMinusGreaterThan
+	KindMinusGreaterThanGreaterThan kind = kindMinusGreaterThanGreaterThan
+	KindLeftParen                   Kind = kindLeftParen
+	KindRightParen                  Kind = kindRightParen
+	KindSemicolon                   Kind = kindSemicolon
+	KindPlus                        Kind = kindPlus
+	KindAsterisk                    Kind = kindAsterisk
+	KindSlash                       Kind = kindSlash
+	KindPercent                     Kind = kindPercent
+	KindEqual                       Kind = kindEqual
+	KindEqualEqual                  Kind = kindEqualEqual
+	KindLessThanOrEqual             Kind = kindLessThanOrEqual
+	KindLessThanGreaterThan         Kind = kindLessThanGreaterThan
+	KindLessThanLessThan            Kind = kindLessThanLessThan
+	KindLessThan                    Kind = kindLessThan
+	KindGreaterThanOrEqual          Kind = kindGreaterThanEqual
+	KindGreaterThanGreaterThan      Kind = kindGreaterThanGreaterThan
+	KindGreaterThan                 Kind = kindGreaterThan
+	KindExclamationEqual            Kind = kindExclamationEqual
+	KindComma                       Kind = kindComma
+	KindAmpersand                   Kind = kindAmpersand
+	KindTilde                       Kind = kindTilde
+	KindPipe                        Kind = kindPipe
+	KindPipePipe                    Kind = kindPipePipe
+	KindDot                         Kind = kindDot
+	KindWhiteSpace                  Kind = kindWhiteSpace
+	KindErrorUnexpectedEOF          Kind = kindErrorUnexpectedEOF
+	KindErrorBlobNotHexadecimal     Kind = kindErrorBlobNotHexadecimal
+	KindErrorInvalidCharacter       Kind = kindErrorInvalidCharacter
+	KindErrorInvalidCharacterAfter  Kind = kindErrorInvalidCharacterAfter
+	KindEOF                         Kind = kindEOF
 )

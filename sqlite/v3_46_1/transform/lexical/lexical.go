@@ -160,7 +160,7 @@ func IsOperator(k token.Kind) bool {
 	switch k {
 	case token.KindMinus, token.KindLeftParen, token.KindRightParen, token.KindSemicolon, token.KindPlus, token.KindAsterisk,
 		token.KindSlash, token.KindPercent, token.KindEqual, token.KindEqualEqual, token.KindLessThanOrEqual,
-		token.KindLessThanGreaterThan, token.KindLessThanLessThan, token.KindLessThan, token.KindGreaterThanEqual,
+		token.KindLessThanGreaterThan, token.KindLessThanLessThan, token.KindLessThan, token.KindGreaterThanOrEqual,
 		token.KindGreaterThanGreaterThan, token.KindGreaterThan, token.KindExclamationEqual, token.KindComma, token.KindAmpersand,
 		token.KindTilde, token.KindPipe, token.KindPipePipe, token.KindDot:
 		return true

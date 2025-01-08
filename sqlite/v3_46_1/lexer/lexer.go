@@ -581,10 +581,22 @@ func (l *Lexer) dollarVariable() *token.Token {
 func (l *Lexer) operator() *token.Token {
 	offsetStart := l.r.getOffset()
 	r, _ := l.r.readRune()
+	rs, _ := l.r.peekNRunes(2)
 	var kind token.Kind
 	switch r {
 	case '-':
-		kind = token.KindMinus
+		if len(rs) > 0 && rs[0] == '>' {
+			if len(rs) > 1 && rs[1] == '>' {
+				kind = token.KindMinusGreaterThanGreaterThan
+				l.r.readRune()
+				l.r.readRune()
+			} else {
+				kind = token.KindMinusGreaterThan
+				l.r.readRune()
+			}
+		} else {
+			kind = token.KindMinus
+		}
 	case '(':
 		kind = token.KindLeftParen
 	case ')':
@@ -634,7 +646,7 @@ func (l *Lexer) operator() *token.Token {
 		if eof || !strings.ContainsRune("=>", r) {
 			kind = token.KindGreaterThan
 		} else if r == '=' {
-			kind = token.KindGreaterThanEqual
+			kind = token.KindGreaterThanOrEqual
 			l.r.readRune()
 		} else {
 			kind = token.KindGreaterThanGreaterThan
