@@ -7,6 +7,7 @@ import (
 	"iter"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -18,6 +19,7 @@ import (
 )
 
 func TestParserExplain(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -33,22 +35,27 @@ func TestParserExplain(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
 	}
 }
 
 func TestParserExplainError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -60,22 +67,27 @@ func TestParserExplainError(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
 	}
 }
 
 func TestParserAlterTable(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -195,22 +207,27 @@ func TestParserAlterTable(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
 	}
 }
 
 func TestParserAlterTableError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -412,22 +429,27 @@ func TestParserAlterTableError(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
 	}
 }
 
 func TestParserExpression(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -766,25 +788,30 @@ func TestParserExpression(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			b := new(strings.Builder)
-			writeErrors(b, parsed)
-			fmt.Print(b.String())
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				b := new(strings.Builder)
+				writeErrors(b, parsed)
+				fmt.Print(b.String())
+				t.Fail()
+			}
+		})
 	}
 }
 
 func TestParserExpressionError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		code string
 		tree string
@@ -1214,18 +1241,22 @@ func TestParserExpressionError(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tp := newTestParser(newTestLexer(c.tree))
-		expected := tp.tree()
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
 
-		p := New(lexer.New([]byte(c.code)))
-		parsed, comments := p.SQLStatement()
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
 
-		if str, equals := compare(c.code, comments, parsed, expected); !equals {
-			fmt.Println(c.code)
-			fmt.Println(str)
-			t.Fail()
-		}
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
 	}
 }
 
