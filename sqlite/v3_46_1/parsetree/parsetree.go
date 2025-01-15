@@ -14,6 +14,7 @@ const (
 	KindAdd Kind = iota
 	KindAddColumn
 	KindAlterTable
+	KindAnalyze
 	KindAnd
 	KindBetween
 	KindBindParameter
@@ -92,6 +93,7 @@ const (
 	KindRenameColumn
 	KindRenameTo
 	KindRightShift
+	KindSchemaIndexOrTableName
 	KindSchemaName
 	KindSelect
 	KindSkipped
@@ -99,6 +101,7 @@ const (
 	KindSubtract
 	KindTableFunctionName
 	KindTableName
+	KindTableOrIndexName
 	KindToken
 	KindTypeName
 	KindWhen
@@ -116,15 +119,15 @@ func (k Kind) String() string {
 // kindStrings contains the string representation of the kinds. Note that the value of a kind is the index of your string
 // representation.
 var kindStrings = []string{
-	"Add", "AddColumn", "AlterTable", "And", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
+	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
 	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Concatenate", "ConflictClause", "ConstraintName", "Divide",
 	"DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan",
 	"Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
 	"FunctionName", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "IsNull", "LeftShift",
 	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike",
 	"NotMatch", "Notnull", "NotNull", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "Raise",
-	"Regexp", "RenameColumn", "RenameTo", "RightShift", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
-	"Token", "TypeName", "When", "WindowName",
+	"Regexp", "RenameColumn", "RenameTo", "RightShift", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
+	"TableOrIndexName", "Token", "TypeName", "When", "WindowName",
 }
 
 // Construction is a construction in SQL grammar.

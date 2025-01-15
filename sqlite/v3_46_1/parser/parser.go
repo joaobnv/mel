@@ -72,6 +72,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.alterTable())
 	case token.KindSelect:
 		father.AddChild(p.selectStatement())
+	case token.KindAnalyze:
+		father.AddChild(p.analyse())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -675,6 +677,43 @@ func (p *Parser) selectStatement() parsetree.NonTerminal {
 
 	if p.isExpressionStart(p.tok[0]) {
 		nt.AddChild(p.expression())
+	}
+
+	return nt
+}
+
+// analyse parses a analyse statement.
+func (p *Parser) analyse() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindAnalyze)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIdentifier && p.tok[1].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+		p.advance()
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+		if p.tok[0].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindTableOrIndexName, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
+		}
+	} else if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaIndexOrTableName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+		if p.tok[0].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindTableOrIndexName, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
+		}
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
 	}
 
 	return nt
