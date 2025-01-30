@@ -74,6 +74,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.selectStatement())
 	case token.KindAnalyze:
 		father.AddChild(p.analyse())
+	case token.KindAttach:
+		father.AddChild(p.attach())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -714,6 +716,40 @@ func (p *Parser) analyse() parsetree.NonTerminal {
 		}
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
+	}
+
+	return nt
+}
+
+// attach parses a attach statement.
+func (p *Parser) attach() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindAttach)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindDatabase {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.isExpressionStart(p.tok[0]) {
+		nt.AddChild(p.expression())
+	} else if p.tok[0].Kind == token.KindAs {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression`)))
+	}
+
+	if p.tok[0].Kind == token.KindAs {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AS"`)))
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
 	}
 
 	return nt

@@ -522,6 +522,77 @@ func TestParserAnalyzeError(t *testing.T) {
 	}
 }
 
+func TestParserAttach(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `ATTACH DATABASE ':memory' AS schema_name;`,
+			tree: `SQLStatement {Attach {TT Expression{T} T SchemaName} T}`,
+		}, {
+			code: `ATTACH '' AS schema_name;`,
+			tree: `SQLStatement {Attach {T Expression{T} T SchemaName} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
+func TestParserAttachError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `ATTACH ;`,
+			tree: `SQLStatement {Attach {T !ErrorMissing} T}`,
+		}, {
+			code: `ATTACH AS ;`,
+			tree: `SQLStatement {Attach {T !ErrorMissing T !ErrorMissing} T}`,
+		}, {
+			code: `ATTACH ':memory' schema_name ;`,
+			tree: `SQLStatement {Attach {T Expression{T} !ErrorMissing SchemaName} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
 func TestParserExpression(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -1769,6 +1840,7 @@ var treeKinds = map[string]parsetree.Kind{
 	"AlterTable":             parsetree.KindAlterTable,
 	"Analyze":                parsetree.KindAnalyze,
 	"And":                    parsetree.KindAnd,
+	"Attach":                 parsetree.KindAttach,
 	"Between":                parsetree.KindBetween,
 	"BindParameter":          parsetree.KindBindParameter,
 	"BitAnd":                 parsetree.KindBitAnd,

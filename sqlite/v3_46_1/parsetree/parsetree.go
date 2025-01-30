@@ -16,6 +16,7 @@ const (
 	KindAlterTable
 	KindAnalyze
 	KindAnd
+	KindAttach
 	KindBetween
 	KindBindParameter
 	KindBitAnd
@@ -119,7 +120,7 @@ func (k Kind) String() string {
 // kindStrings contains the string representation of the kinds. Note that the value of a kind is the index of your string
 // representation.
 var kindStrings = []string{
-	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
+	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
 	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Concatenate", "ConflictClause", "ConstraintName", "Divide",
 	"DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan",
 	"Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
