@@ -80,6 +80,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.begin())
 	case token.KindCommit, token.KindEnd:
 		father.AddChild(p.commit())
+	case token.KindRollback:
+		father.AddChild(p.rollback())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -787,6 +789,37 @@ func (p *Parser) commit() parsetree.NonTerminal {
 	if p.tok[0].Kind == token.KindTransaction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
+	}
+
+	return nt
+}
+
+// rollback parses a rollback statement.
+func (p *Parser) rollback() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindRollback)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindTransaction {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindTo {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindSavepoint {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		}
+
+		if p.tok[0].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSavepointName, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
+		}
 	}
 
 	return nt

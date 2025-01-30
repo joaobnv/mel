@@ -673,6 +673,80 @@ func TestParserCommit(t *testing.T) {
 	}
 }
 
+func TestParserRollback(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `ROLLBACK;`,
+			tree: `SQLStatement {Rollback {T} T}`,
+		}, {
+			code: `ROLLBACK TRANSACTION;`,
+			tree: `SQLStatement {Rollback {TT} T}`,
+		}, {
+			code: `ROLLBACK TRANSACTION TO save_point_name;`,
+			tree: `SQLStatement {Rollback {TTT SavepointName} T}`,
+		}, {
+			code: `ROLLBACK TO SAVEPOINT save_point_name;`,
+			tree: `SQLStatement {Rollback {TTT SavepointName} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
+func TestParserRollbackError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `ROLLBACK TO ;`,
+			tree: `SQLStatement {Rollback {TT !ErrorMissing} T}`,
+		}, {
+			code: `ROLLBACK TO SAVEPOINT ;`,
+			tree: `SQLStatement {Rollback {TTT !ErrorMissing} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
 func TestParserExpression(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

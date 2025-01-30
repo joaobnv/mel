@@ -96,6 +96,8 @@ const (
 	KindRenameColumn
 	KindRenameTo
 	KindRightShift
+	KindRollback
+	KindSavepointName
 	KindSchemaIndexOrTableName
 	KindSchemaName
 	KindSelect
@@ -129,7 +131,7 @@ var kindStrings = []string{
 	"FunctionName", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "IsNull", "LeftShift",
 	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike",
 	"NotMatch", "Notnull", "NotNull", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "Raise",
-	"Regexp", "RenameColumn", "RenameTo", "RightShift", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
+	"Regexp", "RenameColumn", "RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
 	"TableOrIndexName", "Token", "TypeName", "When", "WindowName",
 }
 
