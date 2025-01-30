@@ -32,6 +32,7 @@ const (
 	KindColumnName
 	KindColumnReference
 	KindCommaList
+	KindCommit
 	KindConcatenate
 	KindConflictClause
 	KindConstraintName
@@ -122,7 +123,7 @@ func (k Kind) String() string {
 // representation.
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
-	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Concatenate", "ConflictClause", "ConstraintName", "Divide",
+	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "Concatenate", "ConflictClause", "ConstraintName", "Divide",
 	"DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan",
 	"Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
 	"FunctionName", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "IsNull", "LeftShift",

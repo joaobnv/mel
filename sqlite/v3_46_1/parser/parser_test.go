@@ -633,6 +633,46 @@ func TestParserBegin(t *testing.T) {
 	}
 }
 
+func TestParserCommit(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `COMMIT;`,
+			tree: `SQLStatement {Commit {T} T}`,
+		}, {
+			code: `COMMIT TRANSACTION;`,
+			tree: `SQLStatement {Commit {TT} T}`,
+		}, {
+			code: `END;`,
+			tree: `SQLStatement {Commit {T} T}`,
+		}, {
+			code: `END TRANSACTION;`,
+			tree: `SQLStatement {Commit {TT} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
 func TestParserExpression(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

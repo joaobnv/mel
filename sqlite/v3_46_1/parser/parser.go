@@ -78,6 +78,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.attach())
 	case token.KindBegin:
 		father.AddChild(p.begin())
+	case token.KindCommit, token.KindEnd:
+		father.AddChild(p.commit())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -767,6 +769,20 @@ func (p *Parser) begin() parsetree.NonTerminal {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 	}
+
+	if p.tok[0].Kind == token.KindTransaction {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	return nt
+}
+
+// commit parses a commit statement.
+func (p *Parser) commit() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCommit)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
 
 	if p.tok[0].Kind == token.KindTransaction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
