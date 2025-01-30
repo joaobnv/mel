@@ -593,6 +593,46 @@ func TestParserAttachError(t *testing.T) {
 	}
 }
 
+func TestParserBegin(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `BEGIN;`,
+			tree: `SQLStatement {Begin {T} T}`,
+		}, {
+			code: `BEGIN DEFERRED TRANSACTION;`,
+			tree: `SQLStatement {Begin {TTT} T}`,
+		}, {
+			code: `BEGIN IMMEDIATE;`,
+			tree: `SQLStatement {Begin {TT} T}`,
+		}, {
+			code: `BEGIN EXCLUSIVE TRANSACTION;`,
+			tree: `SQLStatement {Begin {TTT} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
 func TestParserExpression(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -1834,101 +1874,11 @@ func (p *testParser) advance() {
 
 // treeKinds maps a identifier, in the language of specifying the parse tree, to your corresponding
 // kind.
-var treeKinds = map[string]parsetree.Kind{
-	"Add":                    parsetree.KindAdd,
-	"AddColumn":              parsetree.KindAddColumn,
-	"AlterTable":             parsetree.KindAlterTable,
-	"Analyze":                parsetree.KindAnalyze,
-	"And":                    parsetree.KindAnd,
-	"Attach":                 parsetree.KindAttach,
-	"Between":                parsetree.KindBetween,
-	"BindParameter":          parsetree.KindBindParameter,
-	"BitAnd":                 parsetree.KindBitAnd,
-	"BitNot":                 parsetree.KindBitNot,
-	"BitOr":                  parsetree.KindBitOr,
-	"Case":                   parsetree.KindCase,
-	"Cast":                   parsetree.KindCast,
-	"Collate":                parsetree.KindCollate,
-	"CollationName":          parsetree.KindCollationName,
-	"ColumnConstraint":       parsetree.KindColumnConstraint,
-	"ColumnDefinition":       parsetree.KindColumnDefinition,
-	"ColumnName":             parsetree.KindColumnName,
-	"ColumnReference":        parsetree.KindColumnReference,
-	"CommaList":              parsetree.KindCommaList,
-	"Concatenate":            parsetree.KindConcatenate,
-	"ConflictClause":         parsetree.KindConflictClause,
-	"ConstraintName":         parsetree.KindConstraintName,
-	"Divide":                 parsetree.KindDivide,
-	"DropColumn":             parsetree.KindDropColumn,
-	"Else":                   parsetree.KindElse,
-	"Equal":                  parsetree.KindEqual,
-	"ErrorExpecting":         parsetree.KindErrorExpecting,
-	"ErrorMessage":           parsetree.KindErrorMessage,
-	"ErrorMissing":           parsetree.KindErrorMissing,
-	"ErrorUnexpectedEOF":     parsetree.KindErrorUnexpectedEOF,
-	"Exists":                 parsetree.KindExists,
-	"Explain":                parsetree.KindExplain,
-	"ExplainQueryPlan":       parsetree.KindExplainQueryPlan,
-	"Expression":             parsetree.KindExpression,
-	"Extract1":               parsetree.KindExtract1,
-	"Extract2":               parsetree.KindExtract2,
-	"FilterClause":           parsetree.KindFilterClause,
-	"ForeignKeyClause":       parsetree.KindForeignKeyClause,
-	"FrameSpec":              parsetree.KindFrameSpec,
-	"FrameSpecBetween":       parsetree.KindFrameSpecBetween,
-	"FunctionArguments":      parsetree.KindFunctionArguments,
-	"FunctionCall":           parsetree.KindFunctionCall,
-	"FunctionName":           parsetree.KindFunctionName,
-	"Glob":                   parsetree.KindGlob,
-	"GreaterThan":            parsetree.KindGreaterThan,
-	"GreaterThanOrEqual":     parsetree.KindGreaterThanOrEqual,
-	"In":                     parsetree.KindIn,
-	"Is":                     parsetree.KindIs,
-	"IsDistinctFrom":         parsetree.KindIsDistinctFrom,
-	"IsNot":                  parsetree.KindIsNot,
-	"IsNotDistinctFrom":      parsetree.KindIsNotDistinctFrom,
-	"IsNull":                 parsetree.KindIsNull,
-	"LeftShift":              parsetree.KindLeftShift,
-	"LessThan":               parsetree.KindLessThan,
-	"LessThanOrEqual":        parsetree.KindLessThanOrEqual,
-	"Like":                   parsetree.KindLike,
-	"Match":                  parsetree.KindMatch,
-	"Mod":                    parsetree.KindMod,
-	"Multiply":               parsetree.KindMultiply,
-	"Negate":                 parsetree.KindNegate,
-	"Not":                    parsetree.KindNot,
-	"NotBetween":             parsetree.KindNotBetween,
-	"NotEqual":               parsetree.KindNotEqual,
-	"NotGlob":                parsetree.KindNotGlob,
-	"NotIn":                  parsetree.KindNotIn,
-	"NotLike":                parsetree.KindNotLike,
-	"NotMatch":               parsetree.KindNotMatch,
-	"Notnull":                parsetree.KindNotnull,
-	"NotNull":                parsetree.KindNotNull,
-	"NotRegexp":              parsetree.KindNotRegexp,
-	"Or":                     parsetree.KindOr,
-	"OrderBy":                parsetree.KindOrderBy,
-	"OrderingTerm":           parsetree.KindOrderingTerm,
-	"OverClause":             parsetree.KindOverClause,
-	"ParenExpression":        parsetree.KindParenExpression,
-	"PartitionBy":            parsetree.KindPartitionBy,
-	"PrefixPlus":             parsetree.KindPrefixPlus,
-	"Raise":                  parsetree.KindRaise,
-	"Regexp":                 parsetree.KindRegexp,
-	"RenameColumn":           parsetree.KindRenameColumn,
-	"RenameTo":               parsetree.KindRenameTo,
-	"RightShift":             parsetree.KindRightShift,
-	"SchemaIndexOrTableName": parsetree.KindSchemaIndexOrTableName,
-	"SchemaName":             parsetree.KindSchemaName,
-	"Select":                 parsetree.KindSelect,
-	"Skipped":                parsetree.KindSkipped,
-	"SQLStatement":           parsetree.KindSQLStatement,
-	"Subtract":               parsetree.KindSubtract,
-	"TableFunctionName":      parsetree.KindTableFunctionName,
-	"TableName":              parsetree.KindTableName,
-	"TableOrIndexName":       parsetree.KindTableOrIndexName,
-	"Token":                  parsetree.KindToken,
-	"TypeName":               parsetree.KindTypeName,
-	"When":                   parsetree.KindWhen,
-	"WindowName":             parsetree.KindWindowName,
+var treeKinds = map[string]parsetree.Kind{}
+
+// init initializes treeKinds.
+func init() {
+	for i := parsetree.KindAdd; i <= parsetree.KindWindowName; i++ {
+		treeKinds[i.String()] = i
+	}
 }

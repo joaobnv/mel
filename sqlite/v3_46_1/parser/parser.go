@@ -76,6 +76,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.analyse())
 	case token.KindAttach:
 		father.AddChild(p.attach())
+	case token.KindBegin:
+		father.AddChild(p.begin())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -750,6 +752,25 @@ func (p *Parser) attach() parsetree.NonTerminal {
 		p.advance()
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+	}
+
+	return nt
+}
+
+// begin parses a begin statement.
+func (p *Parser) begin() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindBegin)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindDeferred || p.tok[0].Kind == token.KindImmediate || p.tok[0].Kind == token.KindExclusive {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindTransaction {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
 	}
 
 	return nt
