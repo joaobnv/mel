@@ -82,6 +82,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.commit())
 	case token.KindRollback:
 		father.AddChild(p.rollback())
+	case token.KindCreate:
+		father.AddChild(p.createIndex())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -820,6 +822,118 @@ func (p *Parser) rollback() parsetree.NonTerminal {
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
 		}
+	}
+
+	return nt
+}
+
+// createIndex parses a create index statement.
+func (p *Parser) createIndex() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCreateIndex)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindUnique {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindNot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
+		}
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier && p.tok[1].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+		p.advance()
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindIndexName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindOn {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing index name`)))
+	}
+
+	if p.tok[0].Kind == token.KindOn {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ON"`)))
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
+	}
+
+	if p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.isExpressionStart(p.tok[0]) {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "("`)))
+	}
+
+	nt.AddChild(p.commaList("indexed column", p.indexedColumn, p.isExpressionStart, func(t *token.Token) bool {
+		return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon ||
+			t.Kind == token.KindEOF
+	}))
+
+	if p.tok[0].Kind == token.KindRightParen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
+	}
+
+	if p.tok[0].Kind == token.KindWhere {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.isExpressionStart(p.tok[0]) {
+			nt.AddChild(p.expression())
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression`)))
+		}
+	}
+
+	return nt
+}
+
+// indexedColumn parses a indexed column.
+func (p *Parser) indexedColumn() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindIndexedColumn)
+	nt.AddChild(p.expression())
+	// the collate part is handled by the expression parser
+
+	if p.tok[0].Kind == token.KindAsc || p.tok[0].Kind == token.KindDesc {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
 	}
 
 	return nt

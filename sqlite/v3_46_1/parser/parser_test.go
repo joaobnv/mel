@@ -747,6 +747,127 @@ func TestParserRollbackError(t *testing.T) {
 	}
 }
 
+func TestParserCreateIndex(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `CREATE INDEX index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE UNIQUE INDEX IF NOT EXISTS index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TTT TTT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX schema_name.index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TT SchemaName T IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(a + b ASC);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{Add{ColumnReference{ColumnName} T ColumnReference{ColumnName}}} T}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(a * b COLLATE collation_name DESC);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{Multiply{ColumnReference{ColumnName} T
+					Collate{ColumnReference{ColumnName} T CollationName}}} T}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(column_name1, column_name2);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}} T IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(column_name) WHERE column_a > 10;`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T T Expression{GreaterThan{ColumnReference{ColumnName} T T}}} T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
+func TestParserCreateIndexError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code string
+		tree string
+	}{
+		{
+			code: `CREATE INDEX IF EXISTS index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TTT !ErrorMissing T IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX IF NOT index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TTTT !ErrorMissing IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX .index_name ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TT !ErrorMissing T IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX ON table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TT !ErrorMissing T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name table_name(column_name);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName !ErrorMissing TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON (column_name);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T !ErrorMissing T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name column_name);`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName !ErrorMissing CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(column_name ;`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} !ErrorMissing} T}`,
+		}, {
+			code: `CREATE INDEX index_name ON table_name(column_name) WHERE ;`,
+			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
+				IndexedColumn{Expression{ColumnReference{ColumnName}}}} TT !ErrorMissing}  T}`,
+		},
+	}
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			t.Parallel()
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			parsed, comments := p.SQLStatement()
+
+			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
 func TestParserExpression(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
