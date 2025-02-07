@@ -50,8 +50,8 @@ func TestParseTree(t *testing.T) {
 }
 
 func TestKindString(t *testing.T) {
-	if KindSQLStatement.String() != "SQLStatement" {
-		fmt.Printf("want %s, got %s", "SQLStatement", KindSQLStatement)
+	if KindWindowName.String() != "WindowName" {
+		fmt.Printf("want %s, got %s", "WindowName", KindWindowName)
 		t.Fail()
 	}
 

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -18,22 +19,58 @@ import (
 	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
 )
 
-func TestParserExplain(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `EXPLAIN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-			tree: `SQLStatement {Explain {T AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} ColumnConstraint{T T Expression{T} T T} }}}} T}`,
-		}, {
-			code: `EXPLAIN QUERY PLAN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-			tree: `SQLStatement {ExplainQueryPlan {TTT AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} ColumnConstraint{T T Expression{T} T T} }}}} T}`,
-		},
+// testCase is a test case.
+type testCase struct {
+	code string
+	tree string
+}
+
+// testCases returns a slice of testCase from a list of code, tree pairs.
+// testCases panics if given an odd number of arguments.
+func testCases(p ...string) (cases []testCase) {
+	if len(p)%2 == 1 {
+		panic(errors.New("len(p) must be even"))
 	}
+	for c := range slices.Chunk(p, 2) {
+		cases = append(cases, testCase{code: c[0], tree: c[1]})
+	}
+	return cases
+}
+
+func TestSQLStatement(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`EXPLAIN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
+		`SQLStatement {Explain {T AlterTable {TT TableName AddColumn {TT ColDef {ColName
+			ColConstr {NotNullColumnConstraint{TT}}
+			ColConstr {GeneratedColumnConstraint{TT E{T} T T} }}}}} T}`,
+		`EXPLAIN QUERY PLAN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
+		`SQLStatement {ExplainQueryPlan {TTT AlterTable {TT TableName AddColumn {TT ColDef {ColName
+			ColConstr {NotNullColumnConstraint{TT}} ColConstr{GeneratedColumnConstraint{T T E{T} T T}} }}}} T}`,
+		`EXPLAIN QUERY ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
+		`SQLStatement {ExplainQueryPlan {TT !ErrorMissing AlterTable {TT TableName AddColumn {TT ColDef {ColName
+			ColConstr {NotNullColumnConstraint{TT}} ColConstr{GeneratedColumnConstraint{T T E{T} T T}} }}}} T}`,
+		`ALTER TABLE table_a RENAME TO table_b`,
+		"SQLStatement {AlterTable {TT TableName RenameTo {TT TableName}} T}",
+		`ANALYZE schema_name`,
+		"SQLStatement {Analyze {T SchemaIndexOrTableName} T}",
+		`ATTACH DATABASE ':memory' AS schema_name`,
+		"SQLStatement {Attach {TT E{T} T SchemaName} T}",
+		`BEGIN`,
+		"SQLStatement {Begin {T} T}",
+		`COMMIT`,
+		"SQLStatement {Commit {T} T}",
+		`ROLLBACK`,
+		"SQLStatement {Rollback {T} T}",
+		`CREATE INDEX index_name ON table_name(column_name)`,
+		"SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T} T}",
+		`CREATE TABLE table_name (column_a);`,
+		"SQLStatement {CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
+		`SELECT 10;`,
+		"SQLStatement {Select {T E{T}} T}",
+		`SELECT 10 10;`,
+		"SQLStatement {Select {T E{T}} Skipped{T} T}",
+	)
 
 	for i, c := range cases {
 		c := c
@@ -54,489 +91,1246 @@ func TestParserExplain(t *testing.T) {
 	}
 }
 
-func TestParserExplainError(t *testing.T) {
+func TestAlterTable(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `EXPLAIN QUERY ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-			tree: `SQLStatement {ExplainQueryPlan {TT !ErrorMissing AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} ColumnConstraint{T T Expression{T} T T} }}}} T}`,
-		},
+	cases := testCases(
+		`ALTER TABLE table_a RENAME TO table_b`,
+		"AlterTable {TT TableName RenameTo {TT TableName}}",
+		`ALTER TABLE schema_a.table_a RENAME TO table_b`,
+		"AlterTable {TT SchemaName T TableName RenameTo {TT TableName}}",
+		`ALTER TABLE table_a RENAME column_a TO column_b`,
+		"AlterTable {TT TableName RenameColumn {T ColumnName T ColumnName}}",
+		`ALTER TABLE /* comment */ table_a RENAME COLUMN column_a TO column_b`,
+		"AlterTable {TT TableName RenameColumn {TT ColumnName T ColumnName}}",
+		`ALTER TABLE table_a ADD column_b INTEGER INTEGER`,
+		"AlterTable {TT TableName AddColumn {T ColumnDefinition {ColumnName TypeName{TT}}}}",
+		`ALTER TABLE table_a ADD COLUMN column_b INTEGER(10)`,
+		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {TTTT}}}}",
+		`ALTER TABLE table_a ADD COLUMN column_b INTEGER(10, 20) PRIMARY KEY`,
+		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {TTTTTT} ColConstr {PrimaryKeyColumnConstraint{TT}} }}}",
+		`ALTER TABLE table_a DROP column_b`,
+		"AlterTable {TT TableName DropColumn {T ColumnName}}",
+		`ALTER TABLE table_a DROP COLUMN column_b`,
+		"AlterTable {TT TableName DropColumn {TT ColumnName}}",
+		`ALTER TABLE RENAME TO table_b`,
+		"AlterTable {TT !ErrorMissing RenameTo {TT TableName}}",
+		`ALTER TABLE schema_a. RENAME TO table_b`,
+		"AlterTable {TT SchemaName T !ErrorMissing RenameTo {TT TableName}}",
+		`ALTER TABLE table_a RENAME TO `,
+		"AlterTable {TT TableName RenameTo {TT !ErrorMissing}}",
+		`ALTER TABLE table_a RENAME column_a TO `,
+		"AlterTable {TT TableName RenameColumn {T ColumnName T !ErrorMissing}}",
+		`ALTER TABLE table_a 10 RENAME column_a TO `,
+		"AlterTable {TT TableName Skipped {T} RenameColumn {T ColumnName T !ErrorMissing}}",
+		`ALTER`,
+		"AlterTable {T !ErrorUnexpectedEOF}",
+		`ALTER TABLE table_a RENAME column_a column_b `,
+		"AlterTable {TT TableName RenameColumn {T ColumnName !ErrorMissing ColumnName}}",
+		`ALTER TABLE table_a RENAME COLUMN TO column_b `,
+		"AlterTable {TT TableName RenameColumn {TT !ErrorMissing T ColumnName}}",
+		`ALTER TABLE table_a ADD COLUMN `,
+		"AlterTable {TT TableName AddColumn {TT !ErrorMissing}}",
+		`ALTER TABLE table_a ADD COLUMN column_a INTEGER()`,
+		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T T !ErrorMissing T}}}}",
+		`ALTER TABLE table_a ADD COLUMN column_a INTEGER 10)`,
+		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T !ErrorMissing TT}}}}",
+		`ALTER TABLE table_a DROP COLUMN`,
+		"AlterTable {TT TableName DropColumn {TT !ErrorMissing}}",
+	)
+
+	runTests(t, cases, (*Parser).alterTable)
+}
+
+func TestTypeName(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`INTEGER`, "TypeName{T}",
+		`INTEGER(10)`, "TypeName{TTTT}",
+		`INTEGER(+10, -10)`, "TypeName{TTTTTTTT}",
+		`INTEGER(, -10)`, "TypeName{TT !ErrorMissing TTTT}",
+		`INTEGER(-10, )`, "TypeName{TTTTT !ErrorMissing T}",
+		`INTEGER(-10 10)`, "TypeName{TTTT !ErrorMissing TT}",
+	)
+
+	runTests(t, cases, (*Parser).typeName)
+}
+
+func TestColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CONSTRAINT constr PRIMARY KEY`,
+		"ColConstr{T ConstraintName PrimaryKeyColumnConstraint{TT}}",
+		`NOT NULL`,
+		"ColConstr{NotNullColumnConstraint{TT}}",
+		`UNIQUE`,
+		"ColConstr{UniqueColumnConstraint{T}}",
+		`CHECK(10)`,
+		"ColConstr{CheckColumnConstraint{T T E{T} T}}",
+		`DEFAULT NULL`,
+		"ColConstr{DefaultColumnConstraint{TT}}",
+		`COLLATE c`,
+		"ColConstr{CollateColumnConstraint{T CollationName}}",
+		`REFERENCES table_name`,
+		"ColConstr{ForeignKeyColumnConstraint{ForeignKeyClause{T TableName}}}",
+		`AS (10)`,
+		"ColConstr{GeneratedColumnConstraint{TT E{T} T}}",
+		`CONSTRAINT PRIMARY KEY`,
+		"ColConstr{T !ErrorMissing PrimaryKeyColumnConstraint{TT}}",
+		`10`,
+		"ColConstr{!ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).columnConstraint)
+}
+
+func TestPrimaryKeyColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`PRIMARY KEY`, "PrimaryKeyColumnConstraint{TT}",
+		`PRIMARY KEY ASC ON CONFLICT ROLLBACK`,
+		"PrimaryKeyColumnConstraint{TTT ConflictClause{TTT}}",
+		`PRIMARY KEY DESC AUTOINCREMENT`, "PrimaryKeyColumnConstraint{TTTT}",
+		`PRIMARY`, "PrimaryKeyColumnConstraint{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).primaryKeyColumnConstraint)
+}
+
+func TestNotNullColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`NOT NULL`, "NotNullColumnConstraint{TT}",
+		`NOT NULL ON CONFLICT ROLLBACK`,
+		"NotNullColumnConstraint{TT ConflictClause{TTT}}",
+		`NOT`, "NotNullColumnConstraint{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).notNullColumnConstraint)
+}
+
+func TestUniqueColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`UNIQUE`, "UniqueColumnConstraint{T}",
+		`UNIQUE ON CONFLICT ROLLBACK`,
+		"UniqueColumnConstraint{T ConflictClause{TTT}}",
+	)
+
+	runTests(t, cases, (*Parser).uniqueColumnConstraint)
+}
+
+func TestCheckColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CHECK(a > 10)`,
+		"CheckColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}",
+		`CHECK a > 10)`,
+		"CheckColumnConstraint{T !ErrorMissing E{GreaterThan{ColRef{ColName} TT}} T}",
+		`CHECK()`,
+		"CheckColumnConstraint{TT !ErrorMissing T}",
+		`CHECK(a > 10`,
+		"CheckColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).checkColumnConstraint)
+}
+
+func TestDefaultColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DEFAULT(a > 10)`,
+		"DefaultColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}",
+		`DEFAULT 10`,
+		"DefaultColumnConstraint{T T}",
+		`DEFAULT -10`,
+		"DefaultColumnConstraint{T TT}",
+		`DEFAULT a`,
+		"DefaultColumnConstraint{T !ErrorExpecting}",
+		`DEFAULT()`,
+		"DefaultColumnConstraint{TT !ErrorMissing T}",
+		`DEFAULT(a > 10`,
+		"DefaultColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} !ErrorMissing}",
+		`DEFAULT -a`,
+		"DefaultColumnConstraint{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).defaultColumnConstraint)
+}
+
+func TestCollateColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`COLLATE c`,
+		"CollateColumnConstraint{T CollationName}",
+		`COLLATE`,
+		"CollateColumnConstraint{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).collateColumnConstraint)
+}
+
+func TestGeneratedColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`GENERATED ALWAYS AS (10)`,
+		"GeneratedColumnConstraint{TTTT E{T} T}",
+		`AS (10) STORED`,
+		"GeneratedColumnConstraint{TT E{T} T T}",
+		`AS (10) VIRTUAL`,
+		"GeneratedColumnConstraint{TT E{T} T T}",
+		`GENERATED AS (10)`,
+		"GeneratedColumnConstraint{T !ErrorMissing TT E{T} T}",
+		`GENERATED ALWAYS (10)`,
+		"GeneratedColumnConstraint{TT !ErrorMissing T E{T} T}",
+		`AS ()`,
+		"GeneratedColumnConstraint{TT !ErrorMissing T}",
+		`AS 10)`,
+		"GeneratedColumnConstraint{T !ErrorMissing E{T} T}",
+		`AS (10`,
+		"GeneratedColumnConstraint{TT E{T} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).generatedColumnConstraint)
+}
+
+func TestForeignKeyColumnConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`REFERENCES table_name`,
+		"ForeignKeyColumnConstraint{ForeignKeyClause{T TableName}}",
+	)
+
+	runTests(t, cases, (*Parser).foreignKeyColumnConstraint)
+}
+
+func TestForeignKeyClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`REFERENCES table_name`,
+		"ForeignKeyClause{T TableName}",
+		`REFERENCES table_name(column_name)`,
+		"ForeignKeyClause{T TableName T CommaList{ColumnName} T}",
+		`REFERENCES table_name ON DELETE SET NULL`,
+		"ForeignKeyClause{T TableName TTTT}",
+		`REFERENCES table_name ON UPDATE SET DEFAULT`,
+		"ForeignKeyClause{T TableName TTTT}",
+		`REFERENCES table_name ON DELETE CASCADE`,
+		"ForeignKeyClause{T TableName TTT}",
+		`REFERENCES table_name ON UPDATE RESTRICT`,
+		"ForeignKeyClause{T TableName TTT}",
+		`REFERENCES table_name ON DELETE NO ACTION`,
+		"ForeignKeyClause{T TableName TTTT}",
+		`REFERENCES table_name MATCH name`,
+		"ForeignKeyClause{T TableName TT}",
+		`REFERENCES table_name DEFERRABLE`,
+		"ForeignKeyClause{T TableName T}",
+		`REFERENCES table_name NOT DEFERRABLE`,
+		"ForeignKeyClause{T TableName TT}",
+		`REFERENCES table_name DEFERRABLE INITIALLY DEFERRED`,
+		"ForeignKeyClause{T TableName TTT}",
+		`REFERENCES table_name DEFERRABLE INITIALLY IMMEDIATE`,
+		"ForeignKeyClause{T TableName TTT}",
+		`REFERENCES`,
+		"ForeignKeyClause{T !ErrorMissing}",
+		`REFERENCES table_name(column_name`,
+		"ForeignKeyClause{T TableName T CommaList{ColumnName} !ErrorMissing}",
+		`REFERENCES table_name ON SET NULL`,
+		"ForeignKeyClause{T TableName T !ErrorExpecting TT}",
+		`REFERENCES table_name ON UPDATE SET`,
+		"ForeignKeyClause{T TableName TTT !ErrorExpecting}",
+		`REFERENCES table_name ON DELETE NO`,
+		"ForeignKeyClause{T TableName TTT !ErrorExpecting}",
+		`REFERENCES table_name ON UPDATE`,
+		"ForeignKeyClause{T TableName TT !ErrorExpecting}",
+		`REFERENCES table_name MATCH`,
+		"ForeignKeyClause{T TableName T !ErrorMissing}",
+		`REFERENCES table_name DEFERRABLE INITIALLY`,
+		"ForeignKeyClause{T TableName TT !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).foreignKeyClause)
+}
+
+func TestConflictClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ON CONFLICT ROLLBACK`, "ConflictClause{TTT}",
+		`ON CONFLICT ABORT`, "ConflictClause{TTT}",
+		`ON CONFLICT FAIL`, "ConflictClause{TTT}",
+		`ON CONFLICT IGNORE`, "ConflictClause{TTT}",
+		`ON CONFLICT REPLACE`, "ConflictClause{TTT}",
+		`ON REPLACE`, "ConflictClause{T !ErrorMissing T}",
+		`ON CONFLICT`, "ConflictClause{TT !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).conflictClause)
+}
+
+func TestAnalyze(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ANALYZE schema_name`,
+		"Analyze {T SchemaIndexOrTableName}",
+		`ANALYZE schema_name.table_name`,
+		"Analyze {T SchemaName T TableOrIndexName}",
+		`ANALYZE `,
+		"Analyze {T !ErrorMissing}",
+		`ANALYZE schema_name.`,
+		"Analyze {T SchemaName T !ErrorMissing}",
+		`ANALYZE .table_name`,
+		"Analyze {T !ErrorMissing T TableOrIndexName}",
+		`ANALYZE .`,
+		"Analyze {T !ErrorMissing T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).analyze)
+}
+
+func TestAttach(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ATTACH DATABASE ':memory' AS schema_name`, "Attach {TT E{T} T SchemaName}",
+		`ATTACH '' AS schema_name`, "Attach {T E{T} T SchemaName}",
+		`ATTACH ;`, "Attach {T !ErrorMissing}",
+		`ATTACH AS ;`, "Attach {T !ErrorMissing T !ErrorMissing}",
+		`ATTACH ':memory' schema_name ;`, "Attach {T E{T} !ErrorMissing SchemaName}",
+	)
+
+	runTests(t, cases, (*Parser).attach)
+}
+
+func TestBegin(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`BEGIN`, "Begin {T}",
+		`BEGIN DEFERRED TRANSACTION`, "Begin {TTT}",
+		`BEGIN IMMEDIATE`, "Begin {TT}",
+		`BEGIN EXCLUSIVE TRANSACTION`, "Begin {TTT}",
+	)
+
+	runTests(t, cases, (*Parser).begin)
+}
+
+func TestCommit(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`COMMIT`, "Commit {T}",
+		`COMMIT TRANSACTION`, "Commit {TT}",
+		`END`, "Commit {T}",
+		`END TRANSACTION`, "Commit {TT}",
+	)
+
+	runTests(t, cases, (*Parser).commit)
+}
+
+func TestRollback(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ROLLBACK`,
+		"Rollback {T}",
+		`ROLLBACK TRANSACTION`,
+		"Rollback {TT}",
+		`ROLLBACK TRANSACTION TO save_point_name`,
+		"Rollback {TTT SavepointName}",
+		`ROLLBACK TO SAVEPOINT save_point_name`,
+		"Rollback {TTT SavepointName}",
+		`ROLLBACK TO`,
+		"Rollback {TT !ErrorMissing}",
+		`ROLLBACK TO SAVEPOINT`,
+		"Rollback {TTT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).rollback)
+}
+
+func TestCreateIndex(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CREATE INDEX index_name ON table_name(column_name)`,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE UNIQUE INDEX IF NOT EXISTS index_name ON table_name(column_name)`,
+		"CreateIndex {TTT TTT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX schema_name.index_name ON table_name(column_name)`,
+		"CreateIndex {TT SchemaName T IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name ON table_name(a + b ASC)`,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{Add{ColRef{ColName} T ColRef{ColName}}} T}} T}",
+		`CREATE INDEX index_name ON table_name(a * b COLLATE collation_name DESC)`,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{Multiply{ColRef{ColName} T Collate{ColRef{ColName} T CollationName}}} T}} T}",
+		`CREATE INDEX index_name ON table_name(column_name1, column_name2)`,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}} T IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name ON table_name(column_name) WHERE column_a > 10`,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T T E{GreaterThan{ColRef{ColName} T T}}}",
+		`CREATE INDEX IF EXISTS index_name ON table_name(column_name)`,
+		"CreateIndex {TTT !ErrorMissing T IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX IF NOT index_name ON table_name(column_name)`,
+		"CreateIndex {TTTT !ErrorMissing IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX .index_name ON table_name(column_name)`,
+		"CreateIndex {TT !ErrorMissing T IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX ON table_name(column_name)`,
+		"CreateIndex {TT !ErrorMissing T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name table_name(column_name)`,
+		"CreateIndex {TT IndexName !ErrorMissing TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name ON (column_name)`,
+		"CreateIndex {TT IndexName T !ErrorMissing T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name ON table_name column_name)`,
+		"CreateIndex {TT IndexName T TableName !ErrorMissing CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
+		`CREATE INDEX index_name ON table_name(column_name `,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing}",
+		`CREATE INDEX index_name ON table_name(column_name) WHERE `,
+		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} TT !ErrorMissing} ",
+	)
+
+	runTests(t, cases, (*Parser).createIndex)
+}
+
+func TestIndexedColumn(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`column_name`,
+		"IndexedColumn{ColName}",
+		`column_name COLLATE c ASC`,
+		"IndexedColumn{ColName T CollationName T}",
+		`column_name COLLATE ASC`,
+		"IndexedColumn{ColName T !ErrorMissing T}",
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		return p.indexedColumn(false)
 	}
 
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
+	runTests(t, cases, fn)
+}
 
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
+func TestIndexedColumnExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`column_name`,
+		"IndexedColumn{E{ColRef{ColName}}}",
+		`column_name ASC`,
+		"IndexedColumn{E{ColRef{ColName}} T}",
+		`column_name DESC`,
+		"IndexedColumn{E{ColRef{ColName}} T}",
+	)
 
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
+	fn := func(p *Parser) parsetree.NonTerminal {
+		return p.indexedColumn(true)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestCreateTable(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CREATE TABLE table_name (column_a);`,
+		"CreateTable {TT TableName T CommaList{ColDef{ColName}} T}",
+		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
+		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TEMPORARY TABLE table_name AS SELECT 'value';`,
+		"CreateTable {TTT TableName T Select{T E{T}}}",
+		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
+		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TABLE table_a (column_b INTEGER INTEGER);`,
+		"CreateTable {TT TableName T CommaList{ColDef {ColName TypeName{TT}}} T}",
+		`CREATE TABLE table_a (column_b INTEGER(10));`,
+		"CreateTable {TT TableName T CommaList{ColDef {ColName TypeName {TTTT}}} T}",
+		`CREATE TABLE table_a (column_b INTEGER(10, 20) PRIMARY KEY);`,
+		`CreateTable {TT TableName T CommaList{ColDef{ColName TypeName {TTTTTT}
+			ColConstr {PrimaryKeyColumnConstraint{TT}} }} T}`,
+		`CREATE TABLE table_a (column_b) WITHOUT ROWID`,
+		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T CommaList{TableOption{TT}}}`,
+		`CREATE TABLE table_a`,
+		`CreateTable {TT TableName !ErrorExpecting}`,
+		`CREATE TABLE IF EXISTS table_name (column_a INTEGER);`,
+		"CreateTable {TT T !ErrorMissing T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TABLE IF NOT table_name (column_a INTEGER);`,
+		"CreateTable {TT TT !ErrorMissing TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TABLE .table_name (column_a INTEGER);`,
+		"CreateTable {TT !ErrorMissing T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TABLE (column_a INTEGER);`,
+		"CreateTable {TT !ErrorMissing T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TABLE table_name (column_a INTEGER`,
+		"CreateTable {TT TableName T CommaList{ColDef{ColName TypeName{T}}} !ErrorMissing}",
+		`CREATE TEMPORARY TABLE table_name AS`,
+		"CreateTable {TTT TableName T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).createTable)
+}
+
+func TestColumnDefinitionList(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`column_a`, "CommaList{ColDef{ColName}}",
+		`column_a, column_b`, "CommaList{ColDef{ColName} T ColDef{ColName}}",
+		`, column_b`, "CommaList{!ErrorMissing T ColDef{ColName}}",
+		`column_a, , column_b`, "CommaList{ColDef{ColName} T !ErrorMissing T ColDef{ColName}}",
+	)
+
+	runTests(t, cases, (*Parser).columnDefinitionList)
+}
+
+func TestTableConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CONSTRAINT pk PRIMARY KEY (column_name)`,
+		"TableConstraint{T ConstraintName PrimaryKeyTableConstraint{TTT CommaList{IndexedColumn{ColName}} T}}",
+		`UNIQUE (column_name)`,
+		"TableConstraint{UniqueTableConstraint{TT CommaList{IndexedColumn{ColName}} T}}",
+		`CHECK (column_name)`,
+		"TableConstraint{CheckTableConstraint{TT E{ColRef{ColName}} T}}",
+		`FOREIGN KEY (column_name) REFERENCES table_name(column_name)`,
+		`TableConstraint{ForeignKeyTableConstraint{TTT CommaList{ColName} T
+			ForeignKeyClause{T TableName T CommaList{ColName} T}}}`,
+		`CONSTRAINT PRIMARY KEY (column_name)`,
+		"TableConstraint{T !ErrorMissing PrimaryKeyTableConstraint{TTT CommaList{IndexedColumn{ColName}} T}}",
+		`CONSTRAINT pk CREATE`,
+		"TableConstraint{T ConstraintName !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).tableConstraint)
+}
+
+func TestPrimaryKeyTableConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`PRIMARY KEY (column_name) ON CONFLICT ROLLBACK`,
+		"PrimaryKeyTableConstraint{TT T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
+		`PRIMARY (column_name)`,
+		"PrimaryKeyTableConstraint{T !ErrorMissing T CommaList{IndexedColumn{ColName}} T}",
+		`PRIMARY KEY column_name)`,
+		"PrimaryKeyTableConstraint{TT !ErrorMissing CommaList{IndexedColumn{ColName}} T}",
+		`PRIMARY KEY (column_name`,
+		"PrimaryKeyTableConstraint{TT T CommaList{IndexedColumn{ColName}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).primaryKeyTableConstraint)
+}
+
+func TestUniqueTableConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`UNIQUE (column_name) ON CONFLICT ROLLBACK`,
+		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
+		`UNIQUE column_name)`,
+		"UniqueTableConstraint{T !ErrorMissing CommaList{IndexedColumn{ColName}} T}",
+		`UNIQUE (column_name`,
+		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).uniqueTableConstraint)
+}
+
+func TestCheckTableConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CHECK (TRUE)`, "CheckTableConstraint{T T E{T} T}",
+		`CHECK TRUE)`, "CheckTableConstraint{T !ErrorMissing E{T} T}",
+		`CHECK ()`, "CheckTableConstraint{T T !ErrorMissing T}",
+		`CHECK (TRUE`, "CheckTableConstraint{T T E{T} !ErrorMissing }",
+	)
+
+	runTests(t, cases, (*Parser).checkTableConstraint)
+}
+
+func TestForeignKeyTableConstraint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`FOREIGN KEY (column_name) REFERENCES table_name`,
+		"ForeignKeyTableConstraint{TT T CommaList{ColName} T ForeignKeyClause{T TableName}}",
+		`FOREIGN (column_name) REFERENCES table_name`,
+		"ForeignKeyTableConstraint{T !ErrorMissing T CommaList{ColName} T ForeignKeyClause{T TableName}}",
+		`FOREIGN KEY column_name) REFERENCES table_name`,
+		"ForeignKeyTableConstraint{TT !ErrorMissing CommaList{ColName} T ForeignKeyClause{T TableName}}",
+		`FOREIGN KEY () REFERENCES table_name`,
+		"ForeignKeyTableConstraint{TT T !ErrorMissing T ForeignKeyClause{T TableName}}",
+		`FOREIGN KEY (column_name REFERENCES table_name`,
+		"ForeignKeyTableConstraint{TT T CommaList{ColName} !ErrorMissing ForeignKeyClause{T TableName}}",
+		`FOREIGN KEY (column_name)`,
+		"ForeignKeyTableConstraint{TT T CommaList{ColName} T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).foreignKeyTableConstraint)
+}
+
+func TestTableOptions(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`WITHOUT ROWID`,
+		"CommaList{TableOption{TT}}",
+		`STRICT, WITHOUT ROWID`,
+		"CommaList{TableOption{T} T TableOption{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).tableOptions)
+}
+
+func TestTableOption(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`WITHOUT ROWID`,
+		"TableOption{TT}",
+		`STRICT`,
+		"TableOption{T}",
+		`WITHOUT`,
+		"TableOption{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).tableOption)
+}
+
+func TestColumnNameList(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`column_name_1, column_name_2`,
+		"CommaList{ColName T ColName}",
+		`column_name_1 column_name_2`,
+		"CommaList{ColName !ErrorMissing ColName}",
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		return p.columnNameList([]token.Kind{token.KindRightParen, token.KindSemicolon, token.KindEOF})
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`TRUE OR TRUE`, "E{Or{TTT}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression1(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`TRUE OR TRUE`, "Or{TTT}",
+		`TRUE OR`, "Or{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression1)
+}
+
+func TestExpression2(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`TRUE AND TRUE`, "And{TTT}",
+		`TRUE AND`, "And{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression2)
+}
+
+func TestExpression3(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`NOT TRUE`, "Not{TT}",
+		`NOT`, "Not{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression3)
+}
+
+func TestExpression4(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a = c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
+		`a == c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
+		`a <> c`, "NotEqual{ColRef{ColName} T ColRef{ColName}}",
+		`a != c`, "NotEqual{ColRef{ColName} T ColRef{ColName}}",
+		`10 REGEXP '10'`, "Regexp{TTT}",
+		`'10' NOT REGEXP '20'`, "NotRegexp{TTTT}",
+		`'10' LIKE '20'`, "Like{TTT}",
+		`10 LIKE '10' ESCAPE '!'`, "Like{TTTTT}",
+		`'10' NOT LIKE '20' ESCAPE '!'`, "NotLike{TTTTTT}",
+		`'10' GLOB '20'`, "Glob{TTT}",
+		`10 NOT GLOB '10'`, "NotGlob{TTTT}",
+		`'10' MATCH '20'`, "Match{TTT}",
+		`10 NOT MATCH '10'`, "NotMatch{TTTT}",
+		`10 IS '10'`, "Is{TTT}",
+		`10 BETWEEN 5 AND 15`, "Between{TTTTT}",
+		`10 NOT BETWEEN 5 AND 15`, "NotBetween{TTTTTT}",
+		`10 IN (5)`, "In{TTT CommaList{T} T}",
+		`10 NOT IN (5)`, "NotIn{TTTT CommaList{T} T}",
+		`10 ISNULL`, "Isnull{TT}",
+		`10 NOTNULL`, "Notnull{TT}",
+		`10 NOT NULL`, "NotNull{TTT}",
+		`10 ==`, "Equal{TT !ErrorMissing}",
+		`10 <>`, "NotEqual{TT !ErrorMissing}",
+		`10 GLOB`, "Glob{TT !ErrorMissing}",
+		`10 REGEXP`, "Regexp{TT !ErrorMissing}",
+		`10 MATCH`, "Match{TT !ErrorMissing}",
+		`10 LIKE ESCAPE`, "Like{TT !ErrorMissing T !ErrorMissing}",
+		`10 NOT GLOB`, "NotGlob{TTT !ErrorMissing}",
+		`10 NOT REGEXP`, "NotRegexp{TTT !ErrorMissing}",
+		`10 NOT MATCH`, "NotMatch{TTT !ErrorMissing}",
+		`10 NOT LIKE ESCAPE`, "NotLike{TTT !ErrorMissing T !ErrorMissing}",
+		`10 IN table_function_name(10`, "In{TT TableFunctionName T CommaList{T} !ErrorMissing}",
+		`10 NOT IN table_function_name(10`, "NotIn{TTT TableFunctionName T CommaList{T} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression4)
+}
+
+func TestIsExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`10 IS 10`,
+		"Is{TTT}",
+		`10 IS DISTINCT FROM 10`,
+		"IsDistinctFrom{TTTTT}",
+		`10 IS NOT 10`,
+		"IsNot{TTTT}",
+		`10 IS NOT DISTINCT FROM 10`,
+		"IsNotDistinctFrom{TTTTTT}",
+		`10 IS NOT DISTINCT 10`, "IsNotDistinctFrom{TTTT !ErrorMissing T}",
+		`10 IS NOT DISTINCT FROM`, "IsNotDistinctFrom{TTTTT !ErrorMissing}",
+		`10 IS NOT`, "IsNot{TTT !ErrorExpecting}",
+		`10 IS DISTINCT FROM`, "IsDistinctFrom{TTTT !ErrorMissing}",
+		`10 IS DISTINCT 10`, "IsDistinctFrom{TTT !ErrorMissing T}",
+		`10 IS`, "Is{TT !ErrorExpecting}",
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		p.advance() // skip the 10
+		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
+		return p.isExpression(exp)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestBetween(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`10 BETWEEN 5 AND 15`,
+		`Between{TTTTT}`,
+		`10 BETWEEN`, "Between{TT !ErrorMissing}",
+		`10 BETWEEN AND 20`, "Between{TT !ErrorMissing TT}",
+		`10 BETWEEN 10  20`, "Between{TTT !ErrorMissing T}",
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		p.advance() // skip the 10
+		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
+		return p.between(exp)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestNotBetween(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`10 NOT BETWEEN 5 AND 15`,
+		"NotBetween{TTTTTT}",
+		`10 NOT BETWEEN`, "NotBetween{TTT !ErrorMissing}",
+		`10 NOT BETWEEN AND 20`, "NotBetween{TTT !ErrorMissing TT}",
+		`10 NOT BETWEEN 10  20`, "NotBetween{TTTT !ErrorMissing T}",
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		p.advance() // skip the 10
+		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
+		return p.notBetween(exp)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestIn(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`10 IN (10, 20)`, "In{TTT CommaList{TTT} T}",
+		`10 IN ()`, "In{TTTT}",
+		`10 IN (SELECT)`, "In{TTT Select{T} T}",
+		`10 IN schema_name.table_name`, "In{TT SchemaName T TableName}",
+		`10 IN schema_a.table_function_a(10, 20)`, "In{TT SchemaName T TableFunctionName T CommaList{TTT} T }",
+		`10 IN (ALTER)`, "In{TTT !ErrorExpecting Skipped{T} T}",
+		`10 IN (1`, "In{TTT CommaList{T} !ErrorMissing}",
+		`10 IN function()`, "In{TT TableFunctionName T !ErrorMissing T}",
+		`10 IN ALTER`, `In{TT !ErrorExpecting}`,
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		p.advance() // skip the 10
+		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
+		return p.in(exp)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestNotIn(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`10 NOT IN (10, 20)`, "NotIn{TTTT CommaList{TTT} T}",
+		`10 NOT IN ()`, "NotIn{TTTTT}",
+		`10 NOT IN schema_name.table_name`, "NotIn{TTT SchemaName T TableName}",
+		`10 NOT IN schema_a.table_function_a(10, 20)`, "NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T }",
+		`10 NOT IN table_a`, "NotIn{TTT TableName}",
+		`10 NOT IN (SELECT)`, "NotIn{TTTT Select{T} T}", `10 NOT IN (ALTER)`, "NotIn{TTTT !ErrorExpecting Skipped{T} T}",
+		`10 NOT IN (1`, `NotIn{TTTT CommaList{T} !ErrorMissing}`,
+		`10 NOT IN function()`, "NotIn{TTT TableFunctionName T !ErrorMissing T}",
+		`10 NOT IN ALTER`, `NotIn{TTT !ErrorExpecting}`,
+	)
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		p.advance() // skip the 10
+		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
+		return p.notIn(exp)
+	}
+
+	runTests(t, cases, fn)
+}
+
+func TestExpression5(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a < c`, "LessThan{ColRef{ColName} T ColRef{ColName}}",
+		`a <= c`, "LessThanOrEqual{ColRef{ColName} T ColRef{ColName}}",
+		`a > c`, "GreaterThan{ColRef{ColName} T ColRef{ColName}}",
+		`a >= c`, "GreaterThanOrEqual{ColRef{ColName} T ColRef{ColName}}",
+		`10 <`, "LessThan{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression5)
+}
+
+func TestExpression6(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a & c`, "BitAnd{ColRef{ColName} T ColRef{ColName}}",
+		`a | c`, "BitOr{ColRef{ColName} T ColRef{ColName}}",
+		`a << c`, "LeftShift{ColRef{ColName} T ColRef{ColName}}",
+		`a >> c`, "RightShift{ColRef{ColName} T ColRef{ColName}}",
+		`10 &`, "BitAnd{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression6)
+}
+
+func TestExpression7(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a + c`, "Add{ColRef{ColName} T ColRef{ColName}}",
+		`a - c`, "Subtract{ColRef{ColName} T ColRef{ColName}}",
+		`10 +`, "Add{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression7)
+}
+
+func TestExpression8(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a * c`, "Multiply{ColRef{ColName} T ColRef{ColName}}",
+		`a / c`, "Divide{ColRef{ColName} T ColRef{ColName}}",
+		`a % c`, "Mod{ColRef{ColName} T ColRef{ColName}}",
+		`10 *`, "Multiply{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression8)
+}
+
+func TestExpression9(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a || c`, "Concatenate{ColRef{ColName} T ColRef{ColName}}",
+		`a -> c`, "Extract1{ColRef{ColName} T ColRef{ColName}}",
+		`a ->> c`, "Extract2{ColRef{ColName} T ColRef{ColName}}",
+		`10 ||`, "Concatenate{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression9)
+}
+
+func TestExpression10(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a COLLATE c`, "Collate{ColRef{ColName} T CollationName}",
+		`10 COLLATE`, "Collate{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression10)
+}
+
+func TestExpression11(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`~a`, "BitNot{T ColRef{ColName}}",
+		`+a`, "PrefixPlus{T ColRef{ColName}}",
+		`-a`, "Negate{T ColRef{ColName}}",
+		`~`, "BitNot{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).expression11)
+}
+
+func TestSimpleExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a`, "ColRef{ColName}",
+		`?`, "BindParameter",
+		`function_name()`, "FunctionCall{FunctionName TT}",
+		`(10)`, "ParenE{T CommaList{E{T}} T}",
+		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
+		`NOT EXISTS (SELECT 10)`, "Not{T Exists{T T Select{T E{T}} T}}",
+		`EXISTS (SELECT 10)`, "Exists{T T Select{T E{T}} T}",
+		`CASE WHEN TRUE THEN 10 END`, "Case{T When{T E{T} T E{T}} T}",
+		`RAISE (IGNORE)`, "Raise{TTTT}",
+	)
+
+	runTests(t, cases, (*Parser).simpleExpression)
+}
+
+func TestIsStartOfExpression(t *testing.T) {
+	t.Parallel()
+	cases := []*token.Token{
+		token.New([]byte("10"), token.KindNumeric),
+		token.New([]byte("?"), token.KindQuestionVariable),
+		token.New([]byte("a"), token.KindIdentifier),
+	}
+
+	p := New(lexer.New(nil))
+	for _, c := range cases {
+		if !p.isStartOfExpression(c) {
+			t.Logf("isStartOfExpression(%s) == false, want true", c)
+			t.Fail()
+		}
 	}
 }
 
-func TestParserAlterTable(t *testing.T) {
+func TestColumnReference(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ALTER TABLE table_a RENAME TO table_b;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameTo {TT TableName}} T}`,
-		}, {
-			code: `ALTER TABLE schema_a.table_a RENAME TO table_b;`,
-			tree: `SQLStatement {AlterTable {TT SchemaName T TableName RenameTo {TT TableName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a RENAME column_a TO column_b;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameColumn {T ColumnName T ColumnName}} T}`,
-		}, {
-			code: `ALTER TABLE /* comment */ table_a RENAME COLUMN column_a TO column_b;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameColumn {TT ColumnName T ColumnName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD column_b INTEGER INTEGER;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {T ColumnDefinition {ColumnName TypeName{TT}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b INTEGER(10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {TTTT}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b INTEGER(10, 20) PRIMARY KEY;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName TypeName {TTTTTT} ColumnConstraint {TT} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b INTEGER(+10) CONSTRAINT pk PRIMARY KEY AUTOINCREMENT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName TypeName {T TTTT} ColumnConstraint {T ConstraintName TTT} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b PRIMARY KEY ASC ON CONFLICT ROLLBACK;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TTT ConflictClause {TTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b PRIMARY KEY DESC ON CONFLICT ABORT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TTT ConflictClause {TTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b NOT NULL ON CONFLICT FAIL;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT ConflictClause {TTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b UNIQUE ON CONFLICT IGNORE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {T ConflictClause {TTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{T} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b DEFAULT(10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{T} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b DEFAULT 'a';`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b DEFAULT -10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TTT} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b DEFAULT TRUE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b COLLATE collate_a;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {T CollationName} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b ON DELETE SET NULL;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c, column_d) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName T ColumnName} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b MATCH name_a ON DELETE CASCADE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName TT TTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b ON DELETE RESTRICT DEFERRABLE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName TTT T}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b ON DELETE NO ACTION NOT DEFERRABLE INITIALLY DEFERRED;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName TTTT TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b ON DELETE NO ACTION NOT DEFERRABLE INITIALLY IMMEDIATE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName TTTT TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b AS (10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {T T Expression{T} T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b GENERATED ALWAYS AS (10) STORED;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TTT T Expression{T} T T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} ColumnConstraint{T T Expression{T} T T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a DROP column_b;`,
-			tree: `SQLStatement {AlterTable {TT TableName DropColumn {T ColumnName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a DROP COLUMN column_b;`,
-			tree: `SQLStatement {AlterTable {TT TableName DropColumn {TT ColumnName}} T}`,
-		},
-	}
+	cases := testCases(
+		`a`, "ColRef{ColName}",
+		`a.a`, "ColRef{TableName T ColName}",
+		`a.a.a`, "ColRef{SchemaName T TableName T ColName}",
+	)
 
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
+	runTests(t, cases, (*Parser).columnReference)
 }
 
-func TestParserAlterTableError(t *testing.T) {
+func TestFunctionCall(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ALTER TABLE RENAME TO table_b;`,
-			tree: `SQLStatement {AlterTable {TT !ErrorMissing RenameTo {TT TableName}} T}`,
-		}, {
-			code: `ALTER TABLE schema_a. RENAME TO table_b;`,
-			tree: `SQLStatement {AlterTable {TT SchemaName T !ErrorMissing RenameTo {TT TableName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a RENAME TO ;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameTo {TT !ErrorMissing}} T}`,
-		}, {
-			code: `ALTER TABLE table_a RENAME column_a TO ;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameColumn {T ColumnName T !ErrorMissing}} T}`,
-		}, {
-			code: `ALTER TABLE table_a 10 RENAME column_a TO ;`,
-			tree: `SQLStatement {AlterTable {TT TableName Skipped {T} RenameColumn {T ColumnName T !ErrorMissing}} T}`,
-		}, {
-			code: `ALTER `,
-			tree: `SQLStatement {AlterTable {T !ErrorUnexpectedEOF} T}`,
-		}, {
-			code: `ALTER TABLE table_a RENAME column_a column_b ;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameColumn {T ColumnName !ErrorMissing ColumnName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a RENAME COLUMN TO column_b ;`,
-			tree: `SQLStatement {AlterTable {TT TableName RenameColumn {TT !ErrorMissing T ColumnName}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN ;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT !ErrorMissing}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a INTEGER();`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T T !ErrorMissing T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a INTEGER 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T !ErrorMissing TT}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a INTEGER (10 20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName TypeName {T TT !ErrorMissing TT}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a INTEGER (10, );`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName TypeName {T TTT !ErrorMissing T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN CONSTRAINT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT !ErrorMissing}} Skipped{T} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a CONSTRAINT PRIMARY KEY;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {T !ErrorMissing TT}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a PRIMARY;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorMissing}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a NOT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorMissing}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a NOT NULL ON CONFLICT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TT ConflictClause{TT !ErrorExpecting}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b NOT NULL ON  FAIL;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT ConflictClause {T !ErrorMissing T}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a UNIQUE ON;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T ConflictClause{T !ErrorExpecting}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a CHECK 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorMissing Expression{T} T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a CHECK (10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TT Expression{T} !ErrorMissing }}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a CHECK();`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TT !ErrorMissing T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorExpecting}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a DEFAULT ();`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T T !ErrorMissing T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a DEFAULT (10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T T Expression{T} !ErrorMissing }}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a DEFAULT +;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T T !ErrorMissing}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a COLLATE;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorMissing}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {ForeignKeyClause{T !ErrorMissing}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b ();`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {ForeignKeyClause{T TableName T CommaList{!ErrorMissing} T}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b (column_a) ON;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName T CommaList{ColumnName} T T !ErrorExpecting}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c column_d) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName !ErrorMissing ColumnName} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c,) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName T !ErrorMissing} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c 10) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName Skipped{T}} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c 10, 10) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{ColumnName Skipped{T} T Skipped{T}} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (column_c, column_d, column_e;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{
-					ColumnName T ColumnName T ColumnName} !ErrorMissing}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b REFERENCES table_b (10 column_c) ON UPDATE SET DEFAULT;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {ForeignKeyClause {T TableName T CommaList{Skipped{T} ColumnName} T TTTT}} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b (column_a) ON DELETE SET;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName T CommaList{ColumnName} T TTT !ErrorExpecting }}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b (column_a) ON DELETE NO;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName T CommaList{ColumnName} T TTT !ErrorExpecting }}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b (column_a) ON NO ACTION;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName T CommaList{ColumnName} T T !ErrorExpecting TT }}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b MATCH;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName T !ErrorExpecting}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a REFERENCES table_b DEFERRABLE INITIALLY;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {
-					ForeignKeyClause{T TableName TT !ErrorExpecting}}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a AS ();`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T T !ErrorMissing T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a GENERATED ALWAYS AS 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TTT !ErrorMissing Expression{T} T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a GENERATED AS (10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T !ErrorMissing TT Expression{T} T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a GENERATED ALWAYS (10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TT !ErrorMissing T Expression{T} T}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a GENERATED ALWAYS AS (10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {TTT T Expression{T} !ErrorMissing}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_a CONSTRAINT constraint_a;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {
-				TT ColumnDefinition{ColumnName ColumnConstraint {T ConstraintName !ErrorExpecting}}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a DROP COLUMN;`,
-			tree: `SQLStatement {AlterTable {TT TableName DropColumn {TT !ErrorMissing}} T}`,
-		}, {
-			code: `EXPLAIN QUERY ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-			tree: `SQLStatement {ExplainQueryPlan {TT !ErrorMissing AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT} ColumnConstraint{T T Expression{T} T T} }}}} T}`,
-		},
-	}
+	cases := testCases(
+		`func()`,
+		"FnCall{FnName TT}",
+		`func('a')`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}}} T}",
+		`function(;`,
+		"FnCall{FnName T !ErrorMissing}",
+		`function(;`,
+		"FnCall{FnName T !ErrorMissing}",
+		`function(DISTINCT );`,
+		"FnCall{FnName T FnArgs{T !ErrorMissing} T}",
+		`function() FILTER WHERE a);`,
+		"FnCall{FnName TT FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}}",
+		`function() FILTER (a);`,
+		"FnCall{FnName TT FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}}",
+		`function() FILTER (WHERE );`,
+		"FnCall{FnName TT FilterClause{TTT !ErrorMissing T}}",
+		`function() FILTER (WHERE );`,
+		"FnCall{FnName TT FilterClause{TTT !ErrorMissing T}}",
+		`function() FILTER (WHERE 10;`,
+		"FnCall{FnName TT FilterClause{TTT E{T} !ErrorMissing}}",
+		`function() OVER;`,
+		"FnCall{FnName TT OverClause{T !ErrorExpecting}}",
+		`function() OVER (PARTITION a);`,
+		"FnCall{FnName TT OverClause{TT PartitionBy{T !ErrorMissing CommaList{E{ColumnReference{ColumnName}}}} T}}",
+		`function() OVER (PARTITION BY);`,
+		"FnCall{FnName TT OverClause{TT PartitionBy{TT !ErrorMissing} T}}",
+		`function() OVER (;`,
+		"FnCall{FnName TT OverClause{TT !ErrorMissing}}",
+		`function() OVER (RANGE);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T !ErrorExpecting} T}}",
+		`function() OVER (RANGE BETWEEN);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN PRECEDING);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN ROW);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN FOLLOWING);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN AND);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN UNBOUNDED);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing}} T}}",
+		`function() OVER (RANGE BETWEEN 10);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T E{T} !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN CURRENT);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing}} T}}",
+		`function() OVER (RANGE BETWEEN CURRENT ROW CURRENT);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}}",
+		`function() OVER (RANGE BETWEEN CURRENT ROW UNBOUNDED);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}",
+		`function() OVER (RANGE BETWEEN CURRENT ROW 10);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing E{T} !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN UNBOUNDED AND);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN CURRENT AND);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE BETWEEN 10 AND);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T E{T} !ErrorExpecting T !ErrorExpecting}} T}}",
+		`function() OVER (RANGE UNBOUNDED);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}",
+		`function() OVER (RANGE CURRENT);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}",
+		`function() OVER (RANGE 10);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{T E{T} !ErrorMissing} T}}",
+		`function() OVER (RANGE CURRENT ROW EXCLUDE);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{TTTT !ErrorExpecting} T}}",
+		`function() OVER (RANGE CURRENT ROW EXCLUDE NO);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}",
+		`function() OVER (RANGE CURRENT ROW EXCLUDE CURRENT);`,
+		"FnCall{FnName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}",
+		`function(10 ORDER a);`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}",
+		`function(10 ORDER BY);`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT !ErrorMissing}} T}",
+		`function(10 ORDER BY a COLLATE);`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT CommaList{ OrderingTerm{E{Collate{ColRef{ColName} T !ErrorMissing}}}} }} T}",
+		`function(10 ORDER BY a NULLS);`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}} T !ErrorExpecting}} }} T}",
+	)
 
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
+	runTests(t, cases, (*Parser).functionCall)
 }
 
-func TestParserAnalyze(t *testing.T) {
+func TestFunctionArguments(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ANALYZE schema_name;`,
-			tree: `SQLStatement {Analyze {T SchemaIndexOrTableName} T}`,
-		}, {
-			code: `ANALYZE schema_name.table_name;`,
-			tree: `SQLStatement {Analyze {T SchemaName T TableOrIndexName} T}`,
-		},
-	}
+	cases := testCases(
+		`'a'`, "FnArgs{CommaList{E{T}}}",
+		`*`, "FnArgs{T}",
+	)
 
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
+	runTests(t, cases, (*Parser).functionArguments)
 }
 
-func TestParserAnalyzeError(t *testing.T) {
+func TestOrderBy(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ANALYZE ;`,
-			tree: `SQLStatement {Analyze {T !ErrorMissing} T}`,
-		}, {
-			code: `ANALYZE schema_name.;`,
-			tree: `SQLStatement {Analyze {T SchemaName T !ErrorMissing} T}`,
-		}, {
-			code: `ANALYZE .table_name;`,
-			tree: `SQLStatement {Analyze {T !ErrorMissing T TableOrIndexName} T}`,
-		}, {
-			code: `ANALYZE .;`,
-			tree: `SQLStatement {Analyze {T !ErrorMissing T !ErrorMissing} T}`,
-		},
-	}
+	cases := testCases(
+		`ORDER BY a COLLATE c`,
+		"OrderBy{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
+	)
 
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
+	fn := func(p *Parser) parsetree.NonTerminal {
+		return p.orderBy(func(t *token.Token) bool {
+			return t.Kind == token.KindEOF
 		})
 	}
+
+	runTests(t, cases, fn)
 }
 
-func TestParserAttach(t *testing.T) {
+func TestOrderingTerm(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ATTACH DATABASE ':memory' AS schema_name;`,
-			tree: `SQLStatement {Attach {TT Expression{T} T SchemaName} T}`,
-		}, {
-			code: `ATTACH '' AS schema_name;`,
-			tree: `SQLStatement {Attach {T Expression{T} T SchemaName} T}`,
-		},
-	}
+	cases := testCases(
+		`a ASC NULLS LAST`,
+		"OrderingTerm{E{ColRef{ColName}} TTT}",
+		`a DESC NULLS FIRST`,
+		"OrderingTerm{E{ColRef{ColName}} TTT}",
+	)
 
+	runTests(t, cases, (*Parser).orderingTerm)
+}
+
+func TestFilterClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`FILTER (WHERE a + b)`,
+		"FilterClause{TT T E{Add{ColRef{ColName} T ColRef{ColName}}} T}",
+	)
+
+	runTests(t, cases, (*Parser).filterClause)
+}
+
+func TestOverClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`OVER window_a`,
+		"OverClause{T WindowName}",
+		`OVER ()`,
+		"OverClause{TTT}",
+		`OVER (window_a PARTITION BY a, b));`,
+		"OverClause{TT WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}",
+		`OVER (ORDER BY a)`,
+		"OverClause{TT OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}",
+	)
+
+	runTests(t, cases, (*Parser).overClause)
+}
+
+func TestFrameSpec(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS`,
+		"FrameSpec{TTTTTT}",
+		`GROUPS 10 PRECEDING EXCLUDE CURRENT ROW`,
+		"FrameSpec{T E{T} TTTT}",
+		`RANGE CURRENT ROW EXCLUDE GROUP`,
+		"FrameSpec{TTTTT}",
+		`ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING EXCLUDE TIES`,
+		"FrameSpec{T FrameSpecBetween{T E{T} TT E{T} T} TT}",
+	)
+
+	runTests(t, cases, (*Parser).frameSpec)
+}
+
+func TestFrameSpecBetween(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING`,
+		"FrameSpecBetween{TTTT Expression{T} T}",
+		`BETWEEN 10 PRECEDING AND CURRENT ROW`,
+		"FrameSpecBetween{T Expression{T} TTTT}",
+		`BETWEEN CURRENT ROW AND 10 FOLLOWING`,
+		"FrameSpecBetween{TTTT Expression{T} T}",
+		`BETWEEN 10 FOLLOWING AND UNBOUNDED FOLLOWING`,
+		"FrameSpecBetween{T Expression{T} TTTT}",
+	)
+
+	runTests(t, cases, (*Parser).frameSpecBetween)
+}
+
+func TestParenExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`(TRUE = FALSE OR 10 == 20)`,
+		"ParenE{T CommaList{E{Or{Equal{TTT} T Equal{TTT}}}} T}",
+		`(TRUE > FALSE < 10)`,
+		"ParenE{T CommaList{E{LessThan{GreaterThan{TTT} TT}}} T}",
+		`(10 + column_a)`,
+		"ParenExpression{T CommaList{Expression{Add{T T ColumnReference{ColumnName}}}} T}",
+		`();`,
+		"ParenE{T !ErrorMissing T}",
+		`(, 10);`,
+		"ParenE{T CommaList{!ErrorMissing T E{T}} T}",
+		`(10 10);`,
+		"ParenE{T CommaList{E{T} !ErrorMissing E{T}} T}",
+		`(10 AS 10);`,
+		"ParenE{T CommaList{E{T} Skipped{T} E{T}} T}",
+		`(10,,10);`,
+		"ParenE{T CommaList{E{T} T !ErrorMissing T E{T}} T}",
+		`(10, AS);`,
+		"ParenE{T CommaList{E{T} T Skipped{T}} T}",
+		`(10;`,
+		"ParenE{T CommaList{E{T}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).parenExpression)
+}
+
+func TestCastExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
+		`CAST 10 AS NUMBER);`,
+		"Cast{T !ErrorMissing Expression{T} T TypeName{T} T}",
+		`CAST AS NUMBER);`,
+		"Cast{T !ErrorMissing !ErrorMissing T TypeName{T} T}",
+		`CAST(10 AS);`,
+		"Cast{TT Expression{T} T !ErrorMissing T}",
+		`CAST(10 NUMBER);`,
+		"Cast{TT Expression{T} !ErrorMissing TypeName{T} T}",
+		`CAST(10 AS NUMBER;`,
+		"Cast{TT Expression{T} T TypeName{T} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).castExpression)
+}
+
+func TestExists(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`EXISTS(SELECT)`, "Exists{TT Select{T} T}",
+		`EXISTS SELECT 10);`,
+		"Exists{T !ErrorMissing Select{T Expression{T}} T}",
+		`EXISTS(10);`,
+		"Exists{TT Skipped{T} T}",
+		`EXISTS(10;`,
+		"Exists{TT Skipped{T}}",
+		`EXISTS (SELECT 10;`,
+		"Exists{TT Select{T Expression{T}} !ErrorMissing}",
+		`EXISTS ();`,
+		"Exists{TT !ErrorMissing T}",
+	)
+
+	runTests(t, cases, (*Parser).exists)
+}
+
+func TestCaseExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CASE WHEN 10 THEN TRUE ELSE FALSE END`, "Case{T When {T E{T} T E{T}} Else {T E{T}} T}",
+		`CASE a WHEN 10 THEN TRUE END`, "Case{T E{ColRef{ColName}} When {T E{T} T E{T}} T}",
+		`CASE ELSE 10`,
+		"Case{T !ErrorMissing Else{T Expression{T}} !ErrorMissing}",
+		`CASE WHEN THEN 10 END`,
+		"Case{T When{T !ErrorMissing T Expression{T}} T}",
+		`CASE WHEN 10 10 END`,
+		"Case{T When{T Expression{T} !ErrorMissing Expression{T}} T}",
+		`CASE WHEN 10 THEN END`,
+		"Case{T When{T Expression{T} T !ErrorMissing} T}",
+		`CASE WHEN 10 THEN 10 ELSE END`,
+		"Case{T When{T Expression{T} T Expression{T}} Else{T !ErrorMissing} T}",
+	)
+
+	runTests(t, cases, (*Parser).caseExpression)
+}
+
+func TestWhen(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`WHEN 10 THEN TRUE`, "When {T E{T} T E{T}}",
+		`WHEN 10 THEN 'a' END);`, "When{T E{T} T E{T}}",
+		`WHEN 20 THEN 'b'`, "When{T E{T} T E{T}}",
+	)
+
+	runTests(t, cases, (*Parser).when)
+}
+
+func TestCaseElse(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ELSE FALSE END`, "Else{T E{T}}",
+	)
+
+	runTests(t, cases, (*Parser).caseElse)
+}
+
+func TestRaise(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`RAISE (IGNORE)`, "Raise{TTTT}",
+		`RAISE (ROLLBACK, 'error message')`, "Raise{TTTT ErrorMessage{E{T}} T}",
+		`RAISE;`,
+		"Raise{T !ErrorMissing}",
+		`RAISE IGNORE);`,
+		"Raise{T !ErrorMissing TT}",
+		`RAISE(IGNORE;`,
+		"Raise{TTT !ErrorMissing}",
+		`RAISE();`,
+		"Raise{TT !ErrorExpecting T}",
+		`RAISE(, 'error');`,
+		"Raise{TT !ErrorExpecting T ErrorMessage{Expression{T}} T}",
+		`RAISE(ROLLBACK 'error');`,
+		"Raise{TTT !ErrorMissing ErrorMessage{Expression{T}} T}",
+		`RAISE(ROLLBACK, );`,
+		"Raise{TTTT !ErrorMissing T}",
+		`RAISE(ROLLBACK, 'error';`,
+		"Raise{TTTT ErrorMessage{Expression{T}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).raise)
+}
+
+// runTests executes tests of the function parseFunc.
+func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFunc func(*Parser) T) {
 	for i, c := range cases {
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
@@ -545,1133 +1339,14 @@ func TestParserAttach(t *testing.T) {
 			expected := tp.tree()
 
 			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
+			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
+			p.advance()
+			p.advance()
 
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
+			parsed := parseFunc(p)
 
-func TestParserAttachError(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ATTACH ;`,
-			tree: `SQLStatement {Attach {T !ErrorMissing} T}`,
-		}, {
-			code: `ATTACH AS ;`,
-			tree: `SQLStatement {Attach {T !ErrorMissing T !ErrorMissing} T}`,
-		}, {
-			code: `ATTACH ':memory' schema_name ;`,
-			tree: `SQLStatement {Attach {T Expression{T} !ErrorMissing SchemaName} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserBegin(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `BEGIN;`,
-			tree: `SQLStatement {Begin {T} T}`,
-		}, {
-			code: `BEGIN DEFERRED TRANSACTION;`,
-			tree: `SQLStatement {Begin {TTT} T}`,
-		}, {
-			code: `BEGIN IMMEDIATE;`,
-			tree: `SQLStatement {Begin {TT} T}`,
-		}, {
-			code: `BEGIN EXCLUSIVE TRANSACTION;`,
-			tree: `SQLStatement {Begin {TTT} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserCommit(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `COMMIT;`,
-			tree: `SQLStatement {Commit {T} T}`,
-		}, {
-			code: `COMMIT TRANSACTION;`,
-			tree: `SQLStatement {Commit {TT} T}`,
-		}, {
-			code: `END;`,
-			tree: `SQLStatement {Commit {T} T}`,
-		}, {
-			code: `END TRANSACTION;`,
-			tree: `SQLStatement {Commit {TT} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserRollback(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ROLLBACK;`,
-			tree: `SQLStatement {Rollback {T} T}`,
-		}, {
-			code: `ROLLBACK TRANSACTION;`,
-			tree: `SQLStatement {Rollback {TT} T}`,
-		}, {
-			code: `ROLLBACK TRANSACTION TO save_point_name;`,
-			tree: `SQLStatement {Rollback {TTT SavepointName} T}`,
-		}, {
-			code: `ROLLBACK TO SAVEPOINT save_point_name;`,
-			tree: `SQLStatement {Rollback {TTT SavepointName} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserRollbackError(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ROLLBACK TO ;`,
-			tree: `SQLStatement {Rollback {TT !ErrorMissing} T}`,
-		}, {
-			code: `ROLLBACK TO SAVEPOINT ;`,
-			tree: `SQLStatement {Rollback {TTT !ErrorMissing} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserCreateIndex(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `CREATE INDEX index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE UNIQUE INDEX IF NOT EXISTS index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TTT TTT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX schema_name.index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TT SchemaName T IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(a + b ASC);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{Add{ColumnReference{ColumnName} T ColumnReference{ColumnName}}} T}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(a * b COLLATE collation_name DESC);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{Multiply{ColumnReference{ColumnName} T
-					Collate{ColumnReference{ColumnName} T CollationName}}} T}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(column_name1, column_name2);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}} T IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(column_name) WHERE column_a > 10;`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T T Expression{GreaterThan{ColumnReference{ColumnName} T T}}} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserCreateIndexError(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `CREATE INDEX IF EXISTS index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TTT !ErrorMissing T IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX IF NOT index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TTTT !ErrorMissing IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX .index_name ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TT !ErrorMissing T IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX ON table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TT !ErrorMissing T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name table_name(column_name);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName !ErrorMissing TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON (column_name);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T !ErrorMissing T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name column_name);`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName !ErrorMissing CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} T} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(column_name ;`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} !ErrorMissing} T}`,
-		}, {
-			code: `CREATE INDEX index_name ON table_name(column_name) WHERE ;`,
-			tree: `SQLStatement {CreateIndex {TT IndexName T TableName T CommaList{
-				IndexedColumn{Expression{ColumnReference{ColumnName}}}} TT !ErrorMissing}  T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserExpression(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(TRUE OR FALSE OR 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Or{Or{TTT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(TRUE AND FALSE AND 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{And{And{TTT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(NOT NOT (TRUE = FALSE OR 10 == 20));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT
-					Expression{Not {T Not{T ParenExpression{T CommaList{Expression{Or{Equal{TTT} T Equal{TTT}}}} T}}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(TRUE <> FALSE != 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT
-					Expression{NotEqual{NotEqual{TTT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK((TRUE > FALSE < 10) AND (10 >= 20 <= 10));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT
-					Expression{And{
-						ParenExpression{T CommaList{Expression{LessThan{GreaterThan{TTT} TT}}} T} T
-						ParenExpression{T CommaList{Expression{LessThanOrEqual{GreaterThanOrEqual{TTT} TT}}} T}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Is{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS DISTINCT FROM 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsDistinctFrom{TTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNot{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT DISTINCT FROM 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNotDistinctFrom{TTTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 & 20 | 30 << 40 >> 50);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{RightShift{LeftShift{BitOr{BitAnd{TTT} TT} TT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 + 2 - 5);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Subtract{Add{TTT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 * 2 / 5 % 2);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Mod{Divide{Multiply{TTT} TT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('a' || 'b' -> 'c' ->> 'd');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Extract2{Extract1{Concatenate{TTT} TT} TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(~10 + +20 * -30);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Add{BitNot{TT} T Multiply{PrefixPlus{TT} T Negate{TT}}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 BETWEEN 5 AND 15);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Between{TTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT BETWEEN 5 AND 15);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotBetween{TTTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 REGEXP '10');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Regexp{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 LIKE '10' ESCAPE '!');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Like{TTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT GLOB '10');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotGlob{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT MATCH '10');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotMatch{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{T} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('string');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{T} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(?);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{BindParameter} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK($a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{BindParameter} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(column_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{ColumnReference{ColumnName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(table_a.column_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{ColumnReference{TableName T ColumnName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(schema_a.table_a.column_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{ColumnReference{SchemaName T TableName T ColumnName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{
-					FunctionName TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func('a'));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{
-					FunctionName T FunctionArguments{CommaList{Expression{T}}} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(DISTINCT 'a', 10 ORDER BY a, b) FILTER (WHERE a + b));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{
-					FunctionName T FunctionArguments{T CommaList{Expression{T} T Expression{T}}
-						OrderBy {TT CommaList {
-							OrderingTerm{Expression{ColumnReference{ColumnName}}} T
-							OrderingTerm{Expression{ColumnReference{ColumnName}}}
-						}}} T
-						FilterClause{TT T Expression{Add{ColumnReference{ColumnName} T ColumnReference{ColumnName}}}
-							T}}} T} }}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER BY a ASC NULLS LAST);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{TT CommaList{
-						OrderingTerm{Expression{ColumnReference{ColumnName}} TTT}} }} T}}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER BY a DESC NULLS FIRST);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{TT CommaList{
-						OrderingTerm{Expression{ColumnReference{ColumnName}} TTT}} }} T}}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER window_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{T WindowName}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER ());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TTT}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (window_a PARTITION BY a, b));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT WindowName
-						PartitionBy{TT CommaList{Expression{ColumnReference{ColumnName}} T
-							Expression{ColumnReference{ColumnName}}}} T}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (ORDER BY a));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT OrderBy{TT CommaList{OrderingTerm{Expression{ColumnReference{ColumnName}}}}} T}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T FrameSpecBetween{TTTT Expression{T} T}} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (ROWS BETWEEN 10 PRECEDING AND CURRENT ROW));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T FrameSpecBetween{T Expression{T} TTTT}} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (GROUPS BETWEEN CURRENT ROW AND 10 FOLLOWING));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T FrameSpecBetween{TTTT Expression{T} T}} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (RANGE BETWEEN 10 FOLLOWING AND UNBOUNDED FOLLOWING));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T FrameSpecBetween{T Expression{T} TTTT}} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{TTTTTT} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (GROUPS 10 PRECEDING EXCLUDE CURRENT ROW));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T Expression{T} TTTT} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (RANGE CURRENT ROW EXCLUDE GROUP));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{TTTTT} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(func(*) OVER (ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING EXCLUDE TIES));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{FunctionCall{FunctionName T FunctionArguments{T} T
-					OverClause{TT FrameSpec{T FrameSpecBetween{T Expression{T} TT Expression{T} T} TT} T} }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK((10 + column_a));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{
-					ParenExpression{T CommaList{Expression{Add{T T ColumnReference{ColumnName}}}} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(CAST ('10' AS INTEGER));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Cast{TT Expression{T} T TypeName{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' COLLATE collate_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Collate{TT CollationName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' LIKE '20');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Like{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' NOT LIKE '20' ESCAPE '!');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotLike{TTTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' GLOB '20');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Glob{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' NOT REGEXP '20');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotRegexp{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK('10' MATCH '20');`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Match{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 ISNULL);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNull{TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOTNULL);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Notnull{TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT NULL);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotNull{TTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS DISTINCT FROM 20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsDistinctFrom{TTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT 20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNot{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN (10, 20));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TTT CommaList{TTT} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN ());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN (SELECT));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TTT Select{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN schema_name.table_name);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TT SchemaName T TableName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN schema_a.table_function_a(10, 20));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TT SchemaName T TableFunctionName T CommaList{TTT} T }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN (10, 20));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTTT CommaList{TTT} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN ());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN schema_name.table_name);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT SchemaName T TableName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN schema_a.table_function_a(10, 20));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T }} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN table_a);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT TableName}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN (SELECT));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTTT Select{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(EXISTS(SELECT));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Exists{TT Select{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(NOT EXISTS(SELECT));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Not {T Exists{TT Select{T} T}}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(CASE 10 WHEN 10 THEN TRUE ELSE FALSE END);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{
-					Case{T Expression{T} When {T Expression{T} T Expression{T}} Else{T Expression{T}} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(CASE WHEN 10 THEN 'a' WHEN 20 THEN 'b' END);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{
-					Case{T When{T Expression{T} T Expression{T}} When{T Expression{T} T Expression{T}} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(RAISE (IGNORE));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Raise{TTTT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(RAISE (ROLLBACK, 'error message'));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Raise{TTTT ErrorMessage{Expression{T}} T}} T} }}} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
-				b := new(strings.Builder)
-				writeErrors(b, parsed)
-				fmt.Print(b.String())
-				t.Fail()
-			}
-		})
-	}
-}
-
-func TestParserExpressionError(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		code string
-		tree string
-	}{
-		{
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(TRUE OR);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Or{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(TRUE AND);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{And{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(NOT);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Not{T !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 ==);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Equal{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 <>);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotEqual{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 GLOB);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Glob{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 REGEXP);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Regexp{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 MATCH);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Match{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 LIKE ESCAPE);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Like{TT !ErrorMissing T !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT GLOB);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotGlob{TTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT REGEXP);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotRegexp{TTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT MATCH);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotMatch{TTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT LIKE ESCAPE);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotLike{TTT !ErrorMissing T !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT DISTINCT 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNotDistinctFrom{TTTT !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT DISTINCT FROM);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNotDistinctFrom{TTTTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS NOT);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsNot{TTT !ErrorExpecting}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS DISTINCT FROM);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsDistinctFrom{TTTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS DISTINCT 10);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{IsDistinctFrom{TTT !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IS);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Is{TT !ErrorExpecting}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 BETWEEN);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Between{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 BETWEEN AND 20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Between{TT !ErrorMissing TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 BETWEEN 10  20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Between{TTT !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT BETWEEN);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotBetween{TTT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT BETWEEN AND 20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotBetween{TTT !ErrorMissing TT}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT BETWEEN 10  20);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotBetween{TTTT !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN (ALTER));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TTT !ErrorExpecting Skipped{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN (10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TTT CommaList{T} !ErrorMissing}} !ErrorMissing} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN function());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TT TableFunctionName T !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN function(;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TT TableFunctionName T !ErrorMissing}}
-					!ErrorMissing} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 IN ALTER);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{In{TT !ErrorExpecting}} !ErrorMissing} }}} Skipped{TT} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN (ALTER));`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTTT !ErrorExpecting Skipped{T} T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN (10;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTTT CommaList{T} !ErrorMissing}} !ErrorMissing} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN function());`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT TableFunctionName T !ErrorMissing T}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN function(;`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT TableFunctionName T !ErrorMissing}}
-					!ErrorMissing} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 NOT IN ALTER);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{NotIn{TTT !ErrorExpecting}} !ErrorMissing} }}} Skipped{TT} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 <);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{LessThan{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 &);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{BitAnd{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 +);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Add{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 *);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Multiply{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 ||);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Concatenate{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(10 COLLATE);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{Collate{TT !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `ALTER TABLE table_a ADD COLUMN column_b CHECK(~);`,
-			tree: `SQLStatement {AlterTable {TT TableName AddColumn {TT ColumnDefinition {
-				ColumnName ColumnConstraint {TT Expression{BitNot{T !ErrorMissing}} T} }}} T}`,
-		}, {
-			code: `SELECT function(;`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{FunctionName T !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT function(DISTINCT );`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{FunctionName T FunctionArguments{T !ErrorMissing} T}}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER a);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{T !ErrorMissing CommaList{OrderingTerm{Expression{ColumnReference{ColumnName}}}}}} T}}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER BY);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{TT !ErrorMissing}} T}}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER BY a COLLATE);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{TT CommaList{
-						OrderingTerm{Expression{Collate{ColumnReference{ColumnName} T !ErrorMissing}}}} }} T}}} T}`,
-		}, {
-			code: `SELECT function(10 ORDER BY a NULLS);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName T FunctionArguments{CommaList{Expression{T}}
-					OrderBy{TT CommaList{
-						OrderingTerm{Expression{ColumnReference{ColumnName}} T !ErrorExpecting}} }} T}}} T}`,
-		}, {
-			code: `SELECT function() FILTER WHERE a);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName TT FilterClause{T !ErrorMissing T Expression{ColumnReference{ColumnName}} T}}}} T}`,
-		}, {
-			code: `SELECT function() FILTER (a);`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName TT FilterClause{TT !ErrorMissing Expression{ColumnReference{ColumnName}} T}}}} T}`,
-		}, {
-			code: `SELECT function() FILTER (WHERE );`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName TT FilterClause{TTT !ErrorMissing T}}}} T}`,
-		}, {
-			code: `SELECT function() FILTER (WHERE 10;`,
-			tree: `SQLStatement {Select{T Expression{FunctionCall{
-				FunctionName TT FilterClause{TTT Expression{T} !ErrorMissing}}}} T}`,
-		}, {
-			code: `SELECT function() OVER;`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{T !ErrorExpecting}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (PARTITION a);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT
-					PartitionBy{T !ErrorMissing CommaList{Expression{ColumnReference{ColumnName}}}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (PARTITION BY);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT PartitionBy{TT !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (;`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT !ErrorMissing}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T !ErrorExpecting} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN PRECEDING);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN ROW);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN FOLLOWING);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN AND);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN UNBOUNDED);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TT !ErrorMissing}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN 10);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T Expression{T} !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN CURRENT);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TT !ErrorMissing}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN CURRENT ROW CURRENT);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN CURRENT ROW UNBOUNDED);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN CURRENT ROW 10);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TTT !ErrorMissing Expression{T} !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN UNBOUNDED AND);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN CURRENT AND);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE BETWEEN 10 AND);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T
-					FrameSpecBetween{T Expression{T} !ErrorExpecting T !ErrorExpecting}} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE UNBOUNDED);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE CURRENT);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE 10);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{T Expression{T} !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE CURRENT ROW EXCLUDE);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{TTTT !ErrorExpecting} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE CURRENT ROW EXCLUDE NO);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT function() OVER (RANGE CURRENT ROW EXCLUDE CURRENT);`,
-			tree: `SQLStatement {Select{T Expression{
-				FunctionCall{FunctionName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}}} T}`,
-		}, {
-			code: `SELECT ();`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T !ErrorMissing T}}} T}`,
-		}, {
-			code: `SELECT (, 10);`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T CommaList{!ErrorMissing T Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT (10 10);`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T
-				CommaList{Expression{T} !ErrorMissing Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT (10 AS 10);`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T
-				CommaList{Expression{T} Skipped{T} Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT (10,,10);`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T
-				CommaList{Expression{T} T !ErrorMissing T Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT (10, AS);`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T
-				CommaList{Expression{T} T Skipped{T}} T}}} T}`,
-		}, {
-			code: `SELECT (10;`,
-			tree: `SQLStatement {Select{T Expression{ParenExpression{T CommaList{Expression{T}} !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT CAST 10 AS NUMBER);`,
-			tree: `SQLStatement {Select{T Expression{Cast{T !ErrorMissing Expression{T} T TypeName{T} T}}} T}`,
-		}, {
-			code: `SELECT CAST AS NUMBER);`,
-			tree: `SQLStatement {Select{T Expression{Cast{T !ErrorMissing !ErrorMissing T TypeName{T} T}}} T}`,
-		}, {
-			code: `SELECT CAST(10 AS);`,
-			tree: `SQLStatement {Select{T Expression{Cast{TT Expression{T} T !ErrorMissing T}}} T}`,
-		}, {
-			code: `SELECT CAST(10 NUMBER);`,
-			tree: `SQLStatement {Select{T Expression{Cast{TT Expression{T} !ErrorMissing TypeName{T} T}}} T}`,
-		}, {
-			code: `SELECT CAST(10 AS NUMBER;`,
-			tree: `SQLStatement {Select{T Expression{Cast{TT Expression{T} T TypeName{T} !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT EXISTS SELECT 10);`,
-			tree: `SQLStatement {Select{T Expression{Exists{T !ErrorMissing Select{T Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT EXISTS(10);`,
-			tree: `SQLStatement {Select{T Expression{Exists{TT Skipped{T} T}}} T}`,
-		}, {
-			code: `SELECT EXISTS(10;`,
-			tree: `SQLStatement {Select{T Expression{Exists{TT Skipped{T}}}} T}`,
-		}, {
-			code: `SELECT EXISTS (SELECT 10;`,
-			tree: `SQLStatement {Select{T Expression{Exists{TT Select{T Expression{T}} !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT EXISTS ();`,
-			tree: `SQLStatement {Select{T Expression{Exists{TT !ErrorMissing T}}} T}`,
-		}, {
-			code: `SELECT CASE ELSE 10`,
-			tree: `SQLStatement {Select{T Expression{Case{T !ErrorMissing Else{T Expression{T}} !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT CASE WHEN THEN 10 END`,
-			tree: `SQLStatement {Select{T Expression{Case{T When{T !ErrorMissing T Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT CASE WHEN 10 10 END`,
-			tree: `SQLStatement {Select{T Expression{Case{T When{T Expression{T} !ErrorMissing Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT CASE WHEN 10 THEN END`,
-			tree: `SQLStatement {Select{T Expression{Case{T When{T Expression{T} T !ErrorMissing} T}}} T}`,
-		}, {
-			code: `SELECT CASE WHEN 10 THEN 10 ELSE END`,
-			tree: `SQLStatement {Select{T Expression{Case{T When{T Expression{T} T Expression{T}} Else{T !ErrorMissing} T}}} T}`,
-		}, {
-			code: `SELECT RAISE;`,
-			tree: `SQLStatement {Select{T Expression{Raise{T !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT RAISE IGNORE);`,
-			tree: `SQLStatement {Select{T Expression{Raise{T !ErrorMissing TT}}} T}`,
-		}, {
-			code: `SELECT RAISE(IGNORE;`,
-			tree: `SQLStatement {Select{T Expression{Raise{TTT !ErrorMissing}}} T}`,
-		}, {
-			code: `SELECT RAISE();`,
-			tree: `SQLStatement {Select{T Expression{Raise{TT !ErrorExpecting T}}} T}`,
-		}, {
-			code: `SELECT RAISE(, 'error');`,
-			tree: `SQLStatement {Select{T Expression{Raise{TT !ErrorExpecting T ErrorMessage{Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT RAISE(ROLLBACK 'error');`,
-			tree: `SQLStatement {Select{T Expression{Raise{TTT !ErrorMissing ErrorMessage{Expression{T}} T}}} T}`,
-		}, {
-			code: `SELECT RAISE(ROLLBACK, );`,
-			tree: `SQLStatement {Select{T Expression{Raise{TTTT !ErrorMissing T}}} T}`,
-		}, {
-			code: `SELECT RAISE(ROLLBACK, 'error';`,
-			tree: `SQLStatement {Select{T Expression{Raise{TTTT ErrorMessage{Expression{T}} !ErrorMissing}}} T}`,
-		},
-	}
-
-	for i, c := range cases {
-		c := c
-		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
-			tp := newTestParser(newTestLexer(c.tree))
-			expected := tp.tree()
-
-			p := New(lexer.New([]byte(c.code)))
-			parsed, comments := p.SQLStatement()
-
-			if str, equals := compare(c.code, comments, parsed, expected); !equals {
+			if str, equals := compare(c.code, p.comments, parsed, expected); !equals {
 				fmt.Println(c.code)
 				fmt.Println(str)
 				t.Fail()
@@ -2116,4 +1791,13 @@ func init() {
 	for i := parsetree.KindAdd; i <= parsetree.KindWindowName; i++ {
 		treeKinds[i.String()] = i
 	}
+	treeKinds["E"] = parsetree.KindExpression
+	treeKinds["ParenE"] = parsetree.KindParenExpression
+	treeKinds["ColConstr"] = parsetree.KindColumnConstraint
+	treeKinds["ColDef"] = parsetree.KindColumnDefinition
+	treeKinds["ColRef"] = parsetree.KindColumnReference
+	treeKinds["ColName"] = parsetree.KindColumnName
+	treeKinds["FnName"] = parsetree.KindFunctionName
+	treeKinds["FnCall"] = parsetree.KindFunctionCall
+	treeKinds["FnArgs"] = parsetree.KindFunctionArguments
 }

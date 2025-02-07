@@ -25,7 +25,10 @@ const (
 	KindBitOr
 	KindCase
 	KindCast
+	KindCheckColumnConstraint
+	KindCheckTableConstraint
 	KindCollate
+	KindCollateColumnConstraint
 	KindCollationName
 	KindColumnConstraint
 	KindColumnDefinition
@@ -37,6 +40,8 @@ const (
 	KindConflictClause
 	KindConstraintName
 	KindCreateIndex
+	KindCreateTable
+	KindDefaultColumnConstraint
 	KindDivide
 	KindDropColumn
 	KindElse
@@ -53,11 +58,14 @@ const (
 	KindExtract2
 	KindFilterClause
 	KindForeignKeyClause
+	KindForeignKeyColumnConstraint
+	KindForeignKeyTableConstraint
 	KindFrameSpec
 	KindFrameSpecBetween
 	KindFunctionArguments
 	KindFunctionCall
 	KindFunctionName
+	KindGeneratedColumnConstraint
 	KindGlob
 	KindGreaterThan
 	KindGreaterThanOrEqual
@@ -68,7 +76,7 @@ const (
 	KindIsDistinctFrom
 	KindIsNot
 	KindIsNotDistinctFrom
-	KindIsNull
+	KindIsnull
 	KindLeftShift
 	KindLessThan
 	KindLessThanOrEqual
@@ -86,6 +94,7 @@ const (
 	KindNotMatch
 	KindNotnull
 	KindNotNull
+	KindNotNullColumnConstraint
 	KindNotRegexp
 	KindOr
 	KindOrderBy
@@ -94,6 +103,8 @@ const (
 	KindParenExpression
 	KindPartitionBy
 	KindPrefixPlus
+	KindPrimaryKeyColumnConstraint
+	KindPrimaryKeyTableConstraint
 	KindRaise
 	KindRegexp
 	KindRenameColumn
@@ -107,11 +118,15 @@ const (
 	KindSkipped
 	KindSQLStatement
 	KindSubtract
+	KindTableConstraint
 	KindTableFunctionName
 	KindTableName
+	KindTableOption
 	KindTableOrIndexName
 	KindToken
 	KindTypeName
+	KindUniqueColumnConstraint
+	KindUniqueTableConstraint
 	KindWhen
 	KindWindowName
 )
@@ -127,15 +142,17 @@ func (k Kind) String() string {
 // kindStrings contains the string representation of the kinds. Note that the value of a kind is the index of your string
 // representation.
 var kindStrings = []string{
-	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast", "Collate", "CollationName",
-	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "Divide",
-	"DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan",
-	"Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
-	"FunctionName", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "IsNull", "LeftShift",
-	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike",
-	"NotMatch", "Notnull", "NotNull", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "Raise",
-	"Regexp", "RenameColumn", "RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableFunctionName", "TableName",
-	"TableOrIndexName", "Token", "TypeName", "When", "WindowName",
+	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
+	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit",
+	"Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "DefaultColumnConstraint", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
+	"ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2", "FilterClause",
+	"ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob",
+	"GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift",
+	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch",
+	"Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint",
+	"Raise", "Regexp", "RenameColumn", "RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped",
+	"SQLStatement", "Subtract", "TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "Token", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint",
+	"When", "WindowName",
 }
 
 // Construction is a construction in SQL grammar.

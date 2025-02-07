@@ -6,10 +6,11 @@ import (
 )
 
 func TestToken(t *testing.T) {
-	tok := New([]byte("table"), KindTable)
-	expected := "<table, Table>"
+	tok := New([]byte("."), kindDot)
+	expected := `<".", Dot>`
 	if expected != tok.String() {
 		fmt.Printf("expected %q, got %q", expected, tok.String())
+		t.Fail()
 	}
 
 	k := kind(-1)
@@ -17,5 +18,6 @@ func TestToken(t *testing.T) {
 	expected = "<-1>"
 	if expected != tok.String() {
 		fmt.Printf("expected %q, got %q", expected, tok.String())
+		t.Fail()
 	}
 }

@@ -136,11 +136,13 @@ const (
 	kindRight
 	kindRollback
 	kindRow
+	kindRowId
 	kindRows
 	kindSavepoint
 	kindSelect
 	kindSet
 	KindStored
+	kindStrict
 	kindTable
 	kindTemp
 	kindTemporary
@@ -227,8 +229,8 @@ var kindStrings = []string{
 	"In", "Index", "Indexed", "Initially", "Inner", "Insert", "Instead", "Intersect", "Into", "Is", "Isnull", "Join", "Key", "Last", "Left",
 	"Like", "Limit", "Match", "Materialized", "Natural", "No", "Not", "Nothing", "Notnull", "Null", "Nulls", "Of", "Offset", "On", "Or", "Order",
 	"Others", "Outer", "Over", "Partition", "Plan", "Pragma", "Preceding", "Primary", "Query", "Raise", "Range", "Recursive", "References", "Regexp",
-	"Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback", "Row", "Rows", "Savepoint", "Select", "Set",
-	"Stored", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction", "Trigger", "Unbounded", "Union", "Unique", "Update", "Using",
+	"Reindex", "Release", "Rename", "Replace", "Restrict", "Returning", "Right", "Rollback", "Row", "RowId", "Rows", "Savepoint", "Select", "Set",
+	"Stored", "Strict", "Table", "Temp", "Temporary", "Then", "Ties", "To", "Transaction", "Trigger", "Unbounded", "Union", "Unique", "Update", "Using",
 	"Vacuum", "Values", "View", "Virtual", "When", "Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "SQLComment",
 	"CComment", "QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "MinusGreaterThan", "MinusGreaterThanGreaterThan",
 	"LeftParen", "RightParen", "Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
@@ -359,10 +361,12 @@ var (
 	KindRight            Kind = kindRight
 	KindRollback         Kind = kindRollback
 	KindRow              Kind = kindRow
+	KindRowId            Kind = kindRowId
 	KindRows             Kind = kindRows
 	KindSavepoint        Kind = kindSavepoint
 	KindSelect           Kind = kindSelect
 	KindSet              Kind = kindSet
+	KindStrict           Kind = kindStrict
 	KindTable            Kind = kindTable
 	KindTemp             Kind = kindTemp
 	KindTemporary        Kind = kindTemporary
