@@ -694,20 +694,6 @@ func (p *Parser) conflictClause() parsetree.NonTerminal {
 	return nt
 }
 
-// selectStatement parses a select statement.
-func (p *Parser) selectStatement() parsetree.NonTerminal {
-	// TODO: implement this method.
-	nt := parsetree.NewNonTerminal(parsetree.KindSelect)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
-
-	if p.isStartOfExpression(p.tok[0]) {
-		nt.AddChild(p.expression())
-	}
-
-	return nt
-}
-
 // analyze parses a analyze statement.
 func (p *Parser) analyze() parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindAnalyze)
@@ -1303,6 +1289,20 @@ func (p *Parser) columnNameList(follow []token.Kind) parsetree.NonTerminal {
 	)
 }
 
+// selectStatement parses a select statement.
+func (p *Parser) selectStatement() parsetree.NonTerminal {
+	// TODO: implement this method.
+	nt := parsetree.NewNonTerminal(parsetree.KindSelect)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.isStartOfExpression(p.tok[0]) {
+		nt.AddChild(p.expression())
+	}
+
+	return nt
+}
+
 // expression parses a expression.
 func (p *Parser) expression() parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindExpression)
@@ -1392,7 +1392,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1407,7 +1407,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1427,7 +1427,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1441,7 +1441,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1455,7 +1455,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1469,7 +1469,7 @@ func (p *Parser) expression4() parsetree.Construction {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 
-			if p.isExpressionAtLeast4Start(p.tok[0]) {
+			if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 				nt.AddChild(p.expression5())
 			} else {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1480,7 +1480,7 @@ func (p *Parser) expression4() parsetree.Construction {
 				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 				p.advance()
 
-				if p.isExpressionAtLeast4Start(p.tok[0]) {
+				if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 					nt.AddChild(p.expression4())
 				} else {
 					nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1514,7 +1514,7 @@ func (p *Parser) expression4() parsetree.Construction {
 				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 				p.advance()
 
-				if p.isExpressionAtLeast4Start(p.tok[0]) {
+				if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 					nt.AddChild(p.expression5())
 				} else {
 					nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1530,7 +1530,7 @@ func (p *Parser) expression4() parsetree.Construction {
 				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 				p.advance()
 
-				if p.isExpressionAtLeast4Start(p.tok[0]) {
+				if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 					nt.AddChild(p.expression5())
 				} else {
 					nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1546,7 +1546,7 @@ func (p *Parser) expression4() parsetree.Construction {
 				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 				p.advance()
 
-				if p.isExpressionAtLeast4Start(p.tok[0]) {
+				if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 					nt.AddChild(p.expression5())
 				} else {
 					nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1562,7 +1562,7 @@ func (p *Parser) expression4() parsetree.Construction {
 				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 				p.advance()
 
-				if p.isExpressionAtLeast4Start(p.tok[0]) {
+				if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 					nt.AddChild(p.expression5())
 				} else {
 					nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1572,7 +1572,7 @@ func (p *Parser) expression4() parsetree.Construction {
 					nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 					p.advance()
 
-					if p.isExpressionAtLeast4Start(p.tok[0]) {
+					if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 						nt.AddChild(p.expression5())
 					} else {
 						nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1683,7 +1683,7 @@ func (p *Parser) between(exp parsetree.Construction) parsetree.NonTerminal {
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
 
-	if p.isExpressionAtLeast4Start(p.tok[0]) {
+	if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(p.expression4())
 	} else if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1692,11 +1692,11 @@ func (p *Parser) between(exp parsetree.Construction) parsetree.NonTerminal {
 	if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
-	} else if p.isExpressionAtLeast4Start(p.tok[0]) {
+	} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AND"`)))
 	}
 
-	if p.isExpressionAtLeast4Start(p.tok[0]) {
+	if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(p.expression4())
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1715,7 +1715,7 @@ func (p *Parser) notBetween(exp parsetree.Construction) parsetree.NonTerminal {
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
 
-	if p.isExpressionAtLeast4Start(p.tok[0]) {
+	if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(p.expression4())
 	} else if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1724,11 +1724,11 @@ func (p *Parser) notBetween(exp parsetree.Construction) parsetree.NonTerminal {
 	if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
-	} else if p.isExpressionAtLeast4Start(p.tok[0]) {
+	} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AND"`)))
 	}
 
-	if p.isExpressionAtLeast4Start(p.tok[0]) {
+	if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(p.expression4())
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1757,8 +1757,8 @@ func (p *Parser) in(exp parsetree.Construction) parsetree.NonTerminal {
 
 		if p.tok[0].Kind == token.KindSelect {
 			nt.AddChild(p.selectStatement())
-		} else if p.isExpressionAtLeast4Start(p.tok[0]) {
-			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isExpressionAtLeast4Start, func(t *token.Token) bool {
+		} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
+			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isStartOfExpressionAtLeast4, func(t *token.Token) bool {
 				return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon || t.Kind == token.KindEOF
 			}))
 		} else {
@@ -1789,8 +1789,8 @@ func (p *Parser) in(exp parsetree.Construction) parsetree.NonTerminal {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
-			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isExpressionAtLeast4Start, func(t *token.Token) bool {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
+			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isStartOfExpressionAtLeast4, func(t *token.Token) bool {
 				return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon || t.Kind == token.KindEOF
 			}))
 		} else if p.tok[0].Kind == token.KindRightParen {
@@ -1836,8 +1836,8 @@ func (p *Parser) notIn(exp parsetree.Construction) parsetree.NonTerminal {
 
 		if p.tok[0].Kind == token.KindSelect {
 			nt.AddChild(p.selectStatement())
-		} else if p.isExpressionAtLeast4Start(p.tok[0]) {
-			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isExpressionAtLeast4Start, func(t *token.Token) bool {
+		} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
+			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isStartOfExpressionAtLeast4, func(t *token.Token) bool {
 				return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon || t.Kind == token.KindEOF
 			}))
 		} else {
@@ -1868,8 +1868,8 @@ func (p *Parser) notIn(exp parsetree.Construction) parsetree.NonTerminal {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
-			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isExpressionAtLeast4Start, func(t *token.Token) bool {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
+			nt.AddChild(commaListFunc(p, "expression", (*Parser).expression4, p.isStartOfExpressionAtLeast4, func(t *token.Token) bool {
 				return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon || t.Kind == token.KindEOF
 			}))
 		} else if p.tok[0].Kind == token.KindRightParen {
@@ -1893,9 +1893,9 @@ func (p *Parser) notIn(exp parsetree.Construction) parsetree.NonTerminal {
 	return nt
 }
 
-// isExpressionAtLeast4Start reports if
-func (p *Parser) isExpressionAtLeast4Start(tok *token.Token) bool {
-	return p.isStartOfExpression(p.tok[0]) && p.tok[0].Kind != token.KindNot
+// isStartOfExpressionAtLeast4 reports whether tok is a start of expression of precedence at least 4.
+func (p *Parser) isStartOfExpressionAtLeast4(tok *token.Token) bool {
+	return p.isStartOfExpression(tok) && tok.Kind != token.KindNot
 }
 
 // expression5 parses a expression with precedence at least 5.
@@ -1922,7 +1922,7 @@ func (p *Parser) expression5() parsetree.Construction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 			nt.AddChild(p.expression6())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1957,7 +1957,7 @@ func (p *Parser) expression6() parsetree.Construction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 			nt.AddChild(p.expression7())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -1986,7 +1986,7 @@ func (p *Parser) expression7() parsetree.Construction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 			nt.AddChild(p.expression8())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -2017,7 +2017,7 @@ func (p *Parser) expression8() parsetree.Construction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 			nt.AddChild(p.expression9())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -2048,7 +2048,7 @@ func (p *Parser) expression9() parsetree.Construction {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		if p.isExpressionAtLeast4Start(p.tok[0]) {
+		if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 			nt.AddChild(p.expression10())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -2098,7 +2098,7 @@ func (p *Parser) expression11() parsetree.Construction {
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
 
-	if p.isExpressionAtLeast4Start(p.tok[0]) {
+	if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		nt.AddChild(p.expression11())
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression (not starting with "NOT")`)))
@@ -2143,7 +2143,7 @@ func (p *Parser) simpleExpression() parsetree.Construction {
 	}
 }
 
-// isStartOfExpression reports if tok is a start of expression.
+// isStartOfExpression reports whether tok is a start of expression.
 func (p *Parser) isStartOfExpression(tok *token.Token) bool {
 	if p.isLiteralValue(tok) {
 		return true
@@ -2161,7 +2161,7 @@ func (p *Parser) isStartOfExpression(tok *token.Token) bool {
 	return false
 }
 
-// isLiteralValue reports if tok is a literal value.
+// isLiteralValue reports whether tok is a literal value.
 func (p *Parser) isLiteralValue(tok *token.Token) bool {
 	if slices.Contains(
 		[]token.Kind{token.KindNumeric, token.KindString, token.KindBlob,
@@ -2180,7 +2180,7 @@ func (p *Parser) isLiteralValue(tok *token.Token) bool {
 	return lex == "true" || lex == "false"
 }
 
-// isBindParameter reports if tok is a bind parameter.
+// isBindParameter reports whether tok is a bind parameter.
 func (p *Parser) isBindParameter(tok *token.Token) bool {
 	switch tok.Kind {
 	case token.KindAtVariable, token.KindColonVariable, token.KindDollarVariable, token.KindQuestionVariable:
@@ -2285,7 +2285,7 @@ func (p *Parser) functionArguments() parsetree.NonTerminal {
 
 	if p.tok[0].Kind == token.KindOrder {
 		nt.AddChild(p.orderBy(func(t *token.Token) bool {
-			return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon
+			return t.Kind == token.KindRightParen || t.Kind == token.KindSemicolon || t.Kind == token.KindEOF
 		}))
 	}
 
@@ -2390,6 +2390,10 @@ func (p *Parser) overClause() parsetree.NonTerminal {
 	if p.tok[0].Kind == token.KindLeftParen {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
+	} else if slices.Contains(
+		[]token.Kind{token.KindPartition, token.KindOrder, token.KindRange, token.KindRows, token.KindGroups},
+		p.tok[0].Kind) {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting window name, or "("`)))
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting window name, or "("`)))
 		return nt
@@ -2537,11 +2541,8 @@ func (p *Parser) frameSpecBetween() parsetree.NonTerminal {
 		if p.tok[0].Kind == token.KindPreceding {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
-		} else if p.tok[0].Kind == token.KindAnd {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "PRECEDING"`)))
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "PRECEDING"`)))
-			return nt
 		}
 	} else if p.tok[0].Kind == token.KindCurrent {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
@@ -2552,11 +2553,8 @@ func (p *Parser) frameSpecBetween() parsetree.NonTerminal {
 			p.advance()
 		} else if p.tok[0].Kind == token.KindAnd {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ROW"`)))
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ROW"`)))
-			return nt
 		}
-	} else if p.isExpressionAtLeast4Start(p.tok[0]) {
+	} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		exp := parsetree.NewNonTerminal(parsetree.KindExpression)
 		exp.AddChild(p.expression4())
 
@@ -2567,9 +2565,6 @@ func (p *Parser) frameSpecBetween() parsetree.NonTerminal {
 			p.advance()
 		} else if p.tok[0].Kind == token.KindAnd {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "PRECEDING", or "FOLLOWING"`)))
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "PRECEDING", or "FOLLOWING"`)))
-			return nt
 		}
 	} else if p.tok[0].Kind == token.KindPreceding {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "UNBOUNDED", or an expression`)))
@@ -2585,15 +2580,12 @@ func (p *Parser) frameSpecBetween() parsetree.NonTerminal {
 		p.advance()
 	} else if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "UNBOUNDED", "CURRENT", or a expression`)))
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "UNBOUNDED", "CURRENT", or a expression`)))
-		return nt
 	}
 
 	if p.tok[0].Kind == token.KindAnd {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
-	} else if p.tok[0].Kind == token.KindUnbounded || p.tok[0].Kind == token.KindCurrent || p.isStartOfExpression(p.tok[0]) {
+	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AND"`)))
 	}
 
@@ -2617,7 +2609,7 @@ func (p *Parser) frameSpecBetween() parsetree.NonTerminal {
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ROW"`)))
 		}
-	} else if p.isExpressionAtLeast4Start(p.tok[0]) {
+	} else if p.isStartOfExpressionAtLeast4(p.tok[0]) {
 		exp := parsetree.NewNonTerminal(parsetree.KindExpression)
 		exp.AddChild(p.expression4())
 

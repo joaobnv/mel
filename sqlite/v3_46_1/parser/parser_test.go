@@ -141,12 +141,23 @@ func TestAlterTable(t *testing.T) {
 	runTests(t, cases, (*Parser).alterTable)
 }
 
+func TestColumnDefinition(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`a INTEGER PRIMARY KEY`,
+		"ColDef{ColName TypeName{T} ColConstr{PrimaryKeyColumnConstraint{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).columnDefinition)
+}
+
 func TestTypeName(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`INTEGER`, "TypeName{T}",
 		`INTEGER(10)`, "TypeName{TTTT}",
 		`INTEGER(+10, -10)`, "TypeName{TTTTTTTT}",
+		`INTEGER -10)`, "TypeName{T !ErrorMissing TTT}",
 		`INTEGER(, -10)`, "TypeName{TT !ErrorMissing TTTT}",
 		`INTEGER(-10, )`, "TypeName{TTTTT !ErrorMissing T}",
 		`INTEGER(-10 10)`, "TypeName{TTTT !ErrorMissing TT}",
@@ -852,6 +863,7 @@ func TestIn(t *testing.T) {
 		`10 IN (ALTER)`, "In{TTT !ErrorExpecting Skipped{T} T}",
 		`10 IN (1`, "In{TTT CommaList{T} !ErrorMissing}",
 		`10 IN function()`, "In{TT TableFunctionName T !ErrorMissing T}",
+		`10 IN function(10`, "In{TT TableFunctionName T CommaList{T} !ErrorMissing}",
 		`10 IN ALTER`, `In{TT !ErrorExpecting}`,
 	)
 
@@ -875,6 +887,7 @@ func TestNotIn(t *testing.T) {
 		`10 NOT IN (SELECT)`, "NotIn{TTTT Select{T} T}", `10 NOT IN (ALTER)`, "NotIn{TTTT !ErrorExpecting Skipped{T} T}",
 		`10 NOT IN (1`, `NotIn{TTTT CommaList{T} !ErrorMissing}`,
 		`10 NOT IN function()`, "NotIn{TTT TableFunctionName T !ErrorMissing T}",
+		`10 NOT IN function(10`, "NotIn{TTT TableFunctionName T CommaList{T} !ErrorMissing}",
 		`10 NOT IN ALTER`, `NotIn{TTT !ErrorExpecting}`,
 	)
 
@@ -885,6 +898,27 @@ func TestNotIn(t *testing.T) {
 	}
 
 	runTests(t, cases, fn)
+}
+
+func TestIsStartOfExpressionAtLeast4(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		tok    *token.Token
+		result bool
+	}{
+		{tok: token.New([]byte("10"), token.KindNumeric), result: true},
+		{tok: token.New([]byte("?"), token.KindQuestionVariable), result: true},
+		{tok: token.New([]byte("a"), token.KindIdentifier), result: true},
+		{tok: token.New([]byte("NOT"), token.KindNot), result: false},
+	}
+
+	p := New(lexer.New(nil))
+	for _, c := range cases {
+		if p.isStartOfExpressionAtLeast4(c.tok) != c.result {
+			t.Logf("isStartOfExpressionAtLeast4(%s) == %v, want %v", c.tok, !c.result, c.result)
+			t.Fail()
+		}
+	}
 }
 
 func TestExpression5(t *testing.T) {
@@ -951,6 +985,7 @@ func TestExpression9(t *testing.T) {
 func TestExpression10(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
+		`a`, "ColRef{ColName}",
 		`a COLLATE c`, "Collate{ColRef{ColName} T CollationName}",
 		`10 COLLATE`, "Collate{TT !ErrorMissing}",
 	)
@@ -989,16 +1024,62 @@ func TestSimpleExpression(t *testing.T) {
 
 func TestIsStartOfExpression(t *testing.T) {
 	t.Parallel()
-	cases := []*token.Token{
-		token.New([]byte("10"), token.KindNumeric),
-		token.New([]byte("?"), token.KindQuestionVariable),
-		token.New([]byte("a"), token.KindIdentifier),
+	cases := []struct {
+		tok    *token.Token
+		result bool
+	}{
+		{tok: token.New([]byte("10"), token.KindNumeric), result: true},
+		{tok: token.New([]byte("?"), token.KindQuestionVariable), result: true},
+		{tok: token.New([]byte("a"), token.KindIdentifier), result: true},
+		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
 	}
 
 	p := New(lexer.New(nil))
 	for _, c := range cases {
-		if !p.isStartOfExpression(c) {
-			t.Logf("isStartOfExpression(%s) == false, want true", c)
+		if p.isStartOfExpressionAtLeast4(c.tok) != c.result {
+			t.Logf("isStartOfExpression(%s) == %v, want %v", c.tok, !c.result, c.result)
+			t.Fail()
+		}
+	}
+}
+
+func TestIsLiteralValue(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		tok    *token.Token
+		result bool
+	}{
+		{tok: token.New([]byte("NULL"), token.KindNull), result: true},
+		{tok: token.New([]byte("CURRENT_TIME"), token.KindCurrentTime), result: true},
+		{tok: token.New([]byte("TRUE"), token.KindIdentifier), result: true},
+		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
+	}
+
+	p := New(lexer.New(nil))
+	for _, c := range cases {
+		if p.isLiteralValue(c.tok) != c.result {
+			t.Logf("isLiteralValue(%s) == %v, want %v", c.tok, !c.result, c.result)
+			t.Fail()
+		}
+	}
+}
+
+func TestIsBindParameter(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		tok    *token.Token
+		result bool
+	}{
+		{tok: token.New([]byte("@a"), token.KindAtVariable), result: true},
+		{tok: token.New([]byte(":a"), token.KindColonVariable), result: true},
+		{tok: token.New([]byte("$1"), token.KindDollarVariable), result: true},
+		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
+	}
+
+	p := New(lexer.New(nil))
+	for _, c := range cases {
+		if p.isBindParameter(c.tok) != c.result {
+			t.Logf("isBindParameter(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
 	}
@@ -1022,6 +1103,8 @@ func TestFunctionCall(t *testing.T) {
 		"FnCall{FnName TT}",
 		`func('a')`,
 		"FnCall{FnName T FnArgs{CommaList{E{T}}} T}",
+		`func('a') OVER window_name`,
+		"FnCall{FnName T FnArgs{CommaList{E{T}}} T OverClause{T WindowName}}",
 		`function(;`,
 		"FnCall{FnName T !ErrorMissing}",
 		`function(;`,
@@ -1032,62 +1115,6 @@ func TestFunctionCall(t *testing.T) {
 		"FnCall{FnName TT FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}}",
 		`function() FILTER (a);`,
 		"FnCall{FnName TT FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}}",
-		`function() FILTER (WHERE );`,
-		"FnCall{FnName TT FilterClause{TTT !ErrorMissing T}}",
-		`function() FILTER (WHERE );`,
-		"FnCall{FnName TT FilterClause{TTT !ErrorMissing T}}",
-		`function() FILTER (WHERE 10;`,
-		"FnCall{FnName TT FilterClause{TTT E{T} !ErrorMissing}}",
-		`function() OVER;`,
-		"FnCall{FnName TT OverClause{T !ErrorExpecting}}",
-		`function() OVER (PARTITION a);`,
-		"FnCall{FnName TT OverClause{TT PartitionBy{T !ErrorMissing CommaList{E{ColumnReference{ColumnName}}}} T}}",
-		`function() OVER (PARTITION BY);`,
-		"FnCall{FnName TT OverClause{TT PartitionBy{TT !ErrorMissing} T}}",
-		`function() OVER (;`,
-		"FnCall{FnName TT OverClause{TT !ErrorMissing}}",
-		`function() OVER (RANGE);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T !ErrorExpecting} T}}",
-		`function() OVER (RANGE BETWEEN);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN PRECEDING);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN ROW);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN FOLLOWING);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorMissing T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN AND);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T !ErrorExpecting T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN UNBOUNDED);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing}} T}}",
-		`function() OVER (RANGE BETWEEN 10);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T E{T} !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN CURRENT);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing}} T}}",
-		`function() OVER (RANGE BETWEEN CURRENT ROW CURRENT);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}}",
-		`function() OVER (RANGE BETWEEN CURRENT ROW UNBOUNDED);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing T !ErrorMissing}} T}}",
-		`function() OVER (RANGE BETWEEN CURRENT ROW 10);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TTT !ErrorMissing E{T} !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN UNBOUNDED AND);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN CURRENT AND);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{TT !ErrorMissing T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE BETWEEN 10 AND);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T FrameSpecBetween{T E{T} !ErrorExpecting T !ErrorExpecting}} T}}",
-		`function() OVER (RANGE UNBOUNDED);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}",
-		`function() OVER (RANGE CURRENT);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{TT !ErrorMissing} T}}",
-		`function() OVER (RANGE 10);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{T E{T} !ErrorMissing} T}}",
-		`function() OVER (RANGE CURRENT ROW EXCLUDE);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{TTTT !ErrorExpecting} T}}",
-		`function() OVER (RANGE CURRENT ROW EXCLUDE NO);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}",
-		`function() OVER (RANGE CURRENT ROW EXCLUDE CURRENT);`,
-		"FnCall{FnName TT OverClause{TT FrameSpec{TTTTT !ErrorMissing} T}}",
 		`function(10 ORDER a);`,
 		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}",
 		`function(10 ORDER BY);`,
@@ -1105,7 +1132,10 @@ func TestFunctionArguments(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`'a'`, "FnArgs{CommaList{E{T}}}",
+		`DISTINCT 'a'`, "FnArgs{T CommaList{E{T}}}",
+		`'a' ORDER BY a`, "FnArgs{CommaList{E{T}} OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}}",
 		`*`, "FnArgs{T}",
+		``, "FnArgs{!ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).functionArguments)
@@ -1116,6 +1146,8 @@ func TestOrderBy(t *testing.T) {
 	cases := testCases(
 		`ORDER BY a COLLATE c`,
 		"OrderBy{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
+		`ORDER a`, "OrderBy{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}",
+		`ORDER BY`, "OrderBy{TT !ErrorMissing}",
 	)
 
 	fn := func(p *Parser) parsetree.NonTerminal {
@@ -1134,6 +1166,8 @@ func TestOrderingTerm(t *testing.T) {
 		"OrderingTerm{E{ColRef{ColName}} TTT}",
 		`a DESC NULLS FIRST`,
 		"OrderingTerm{E{ColRef{ColName}} TTT}",
+		`a DESC NULLS`,
+		"OrderingTerm{E{ColRef{ColName}} TT !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).orderingTerm)
@@ -1144,6 +1178,14 @@ func TestFilterClause(t *testing.T) {
 	cases := testCases(
 		`FILTER (WHERE a + b)`,
 		"FilterClause{TT T E{Add{ColRef{ColName} T ColRef{ColName}}} T}",
+		`FILTER WHERE a)`,
+		"FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}",
+		`FILTER (a)`,
+		"FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}",
+		`FILTER (WHERE)`,
+		"FilterClause{TTT !ErrorMissing T}",
+		`FILTER (WHERE a`,
+		"FilterClause{TT T E{ColRef{ColName}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).filterClause)
@@ -1160,6 +1202,18 @@ func TestOverClause(t *testing.T) {
 		"OverClause{TT WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}",
 		`OVER (ORDER BY a)`,
 		"OverClause{TT OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}",
+		`OVER (RANGE CURRENT ROW)`,
+		"OverClause{TT FrameSpec{TTT} T}",
+		`OVER ORDER BY a)`,
+		"OverClause{T !ErrorExpecting OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}",
+		`OVER (window_a PARTITION a));`,
+		"OverClause{TT WindowName PartitionBy{T !ErrorMissing CommaList{E{ColRef{ColName}}}} T}",
+		`OVER (window_a PARTITION BY));`,
+		"OverClause{TT WindowName PartitionBy{TT !ErrorMissing} T}",
+		`OVER (RANGE CURRENT ROW`,
+		"OverClause{TT FrameSpec{TTT} !ErrorMissing}",
+		`OVER`,
+		"OverClause{T !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).overClause)
@@ -1176,6 +1230,20 @@ func TestFrameSpec(t *testing.T) {
 		"FrameSpec{TTTTT}",
 		`ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING EXCLUDE TIES`,
 		"FrameSpec{T FrameSpecBetween{T E{T} TT E{T} T} TT}",
+		`ROWS UNBOUNDED EXCLUDE NO OTHERS`,
+		"FrameSpec{TT !ErrorMissing TTT}",
+		`RANGE CURRENT EXCLUDE GROUP`,
+		"FrameSpec{TT !ErrorMissing TT}",
+		`GROUPS 10 EXCLUDE CURRENT ROW`,
+		"FrameSpec{T E{T} !ErrorMissing TTT}",
+		`ROWS`,
+		"FrameSpec{T !ErrorExpecting}",
+		`ROWS UNBOUNDED PRECEDING EXCLUDE NO`,
+		"FrameSpec{TTTTT !ErrorMissing}",
+		`GROUPS 10 PRECEDING EXCLUDE CURRENT`,
+		"FrameSpec{T E{T} TTT !ErrorMissing}",
+		`ROWS UNBOUNDED PRECEDING EXCLUDE`,
+		"FrameSpec{TTTT !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).frameSpec)
@@ -1185,13 +1253,37 @@ func TestFrameSpecBetween(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING`,
-		"FrameSpecBetween{TTTT Expression{T} T}",
+		"FrameSpecBetween{TTTT E{T} T}",
 		`BETWEEN 10 PRECEDING AND CURRENT ROW`,
-		"FrameSpecBetween{T Expression{T} TTTT}",
+		"FrameSpecBetween{T E{T} TTTT}",
 		`BETWEEN CURRENT ROW AND 10 FOLLOWING`,
-		"FrameSpecBetween{TTTT Expression{T} T}",
+		"FrameSpecBetween{TTTT E{T} T}",
 		`BETWEEN 10 FOLLOWING AND UNBOUNDED FOLLOWING`,
-		"FrameSpecBetween{T Expression{T} TTTT}",
+		"FrameSpecBetween{T E{T} TTTT}",
+		`BETWEEN UNBOUNDED AND 10 PRECEDING`,
+		"FrameSpecBetween{TT !ErrorMissing T E{T} T}",
+		`BETWEEN CURRENT AND 10 FOLLOWING`,
+		"FrameSpecBetween{TT !ErrorMissing T E{T} T}",
+		`BETWEEN 10 AND CURRENT ROW`,
+		"FrameSpecBetween{T E{T} !ErrorExpecting TTT}",
+		`BETWEEN PRECEDING AND 10 PRECEDING`,
+		"FrameSpecBetween{T !ErrorExpecting TT E{T} T}",
+		`BETWEEN ROW AND 10 FOLLOWING`,
+		"FrameSpecBetween{T !ErrorMissing TT E{T} T}",
+		`BETWEEN FOLLOWING AND UNBOUNDED FOLLOWING`,
+		"FrameSpecBetween{T !ErrorMissing TTTT}",
+		`BETWEEN AND 10 PRECEDING`,
+		"FrameSpecBetween{T !ErrorExpecting T E{T} T}",
+		`BETWEEN UNBOUNDED PRECEDING 10 PRECEDING`,
+		"FrameSpecBetween{TTT !ErrorMissing E{T} T}",
+		`BETWEEN CURRENT ROW AND UNBOUNDED`,
+		"FrameSpecBetween{TTTTT !ErrorMissing}",
+		`BETWEEN 10 PRECEDING AND CURRENT`,
+		"FrameSpecBetween{T E{T} TTT !ErrorMissing}",
+		`BETWEEN UNBOUNDED PRECEDING AND 10`,
+		"FrameSpecBetween{TTTT E{T} !ErrorExpecting}",
+		`BETWEEN UNBOUNDED PRECEDING AND`,
+		"FrameSpecBetween{TTT T !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).frameSpecBetween)
@@ -1289,6 +1381,9 @@ func TestWhen(t *testing.T) {
 		`WHEN 10 THEN TRUE`, "When {T E{T} T E{T}}",
 		`WHEN 10 THEN 'a' END);`, "When{T E{T} T E{T}}",
 		`WHEN 20 THEN 'b'`, "When{T E{T} T E{T}}",
+		`WHEN THEN TRUE`, "When {T !ErrorMissing T E{T}}",
+		`WHEN 10 TRUE`, "When {T E{T} !ErrorMissing E{T}}",
+		`WHEN 10 THEN`, "When {T E{T} T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).when)
@@ -1298,6 +1393,7 @@ func TestCaseElse(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`ELSE FALSE END`, "Else{T E{T}}",
+		`ELSE END`, "Else{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).caseElse)
