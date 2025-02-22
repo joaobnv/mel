@@ -576,7 +576,7 @@ func (p *Parser) foreignKeyClause() parsetree.NonTerminal {
 		p.advance()
 
 		nt.AddChild(p.columnNameList(
-			[]token.Kind{token.KindRightParen, token.KindSemicolon, token.KindEOF, token.KindOn, token.KindMatch, token.KindDeferrable, token.KindNot}))
+			token.KindRightParen, token.KindSemicolon, token.KindEOF, token.KindOn, token.KindMatch, token.KindDeferrable, token.KindNot))
 
 		if p.tok[0].Kind == token.KindRightParen {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
@@ -1225,7 +1225,7 @@ func (p *Parser) foreignKeyTableConstraint() parsetree.NonTerminal {
 	}
 
 	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(p.columnNameList([]token.Kind{token.KindRightParen, token.KindSemicolon, token.KindEOF, token.KindReferences}))
+		nt.AddChild(p.columnNameList(token.KindRightParen, token.KindSemicolon, token.KindEOF, token.KindReferences))
 	} else if p.tok[0].Kind == token.KindRightParen || p.tok[0].Kind == token.KindSemicolon || p.tok[0].Kind == token.KindEOF {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing column name`)))
 	}
@@ -1276,7 +1276,7 @@ func (p *Parser) tableOption() parsetree.NonTerminal {
 }
 
 // columnNameList parses a list of column names.
-func (p *Parser) columnNameList(follow []token.Kind) parsetree.NonTerminal {
+func (p *Parser) columnNameList(follow ...token.Kind) parsetree.NonTerminal {
 	colNameBuilder := func(p *Parser) parsetree.Terminal {
 		t := parsetree.NewTerminal(parsetree.KindColumnName, p.tok[0])
 		p.advance()
@@ -1289,10 +1289,233 @@ func (p *Parser) columnNameList(follow []token.Kind) parsetree.NonTerminal {
 	)
 }
 
+// createTrigger parses a create trigger statement.
+func (p *Parser) createTrigger() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCreateTrigger)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindTemp || p.tok[0].Kind == token.KindTemporary {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindNot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
+		}
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindTriggerName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindBefore || p.tok[0].Kind == token.KindAfter || p.tok[0].Kind == token.KindInstead ||
+		p.tok[0].Kind == token.KindDelete || p.tok[0].Kind == token.KindInsert || p.tok[0].Kind == token.KindUpdate {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing trigger name`)))
+	}
+
+	if p.tok[0].Kind == token.KindBefore || p.tok[0].Kind == token.KindAfter {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindInstead {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindOf {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "OF"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindDelete || p.tok[0].Kind == token.KindInsert {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindUpdate {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindOf {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+
+			nt.AddChild(p.columnNameList(token.KindOn, token.KindSemicolon, token.KindEOF))
+		}
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", or "UPDATE"`)))
+	}
+
+	if p.tok[0].Kind == token.KindOn {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ON"`)))
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindFor || p.tok[0].Kind == token.KindWhen || p.tok[0].Kind == token.KindBegin {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
+	}
+
+	if p.tok[0].Kind == token.KindFor {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindEach {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindRow {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EACH"`)))
+		}
+
+		if p.tok[0].Kind == token.KindRow {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "ROW"`)))
+		}
+	} else if p.tok[0].Kind == token.KindWhen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.isStartOfExpression(p.tok[0]) {
+			nt.AddChild(p.expression())
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindBegin {
+		nt.AddChild(p.triggerBody())
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing trigger body`)))
+	}
+
+	return nt
+}
+
+// triggerBody parses the body of a create trigger statement.
+func (p *Parser) triggerBody() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindTriggerBody)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	for {
+		if p.tok[0].Kind == token.KindDelete {
+			nt.AddChild(p.delete())
+		} else if p.tok[0].Kind == token.KindInsert {
+			nt.AddChild(p.insert())
+		} else if p.tok[0].Kind == token.KindSelect {
+			nt.AddChild(p.selectStatement())
+		} else if p.tok[0].Kind == token.KindUpdate {
+			nt.AddChild(p.update())
+		} else if p.tok[0].Kind == token.KindSemicolon {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
+		} else {
+			break
+		}
+
+		if p.tok[0].Kind == token.KindSemicolon {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindDelete || p.tok[0].Kind == token.KindInsert || p.tok[0].Kind == token.KindSelect ||
+			p.tok[0].Kind == token.KindUpdate || p.tok[0].Kind == token.KindEnd {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New("missing semicolon")))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindEnd {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "END"`)))
+	}
+
+	return nt
+}
+
+// delete parses a delete statement.
+func (p *Parser) delete() parsetree.NonTerminal {
+	// TODO: implement this method.
+	nt := parsetree.NewNonTerminal(parsetree.KindDelete)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.isStartOfExpression(p.tok[0]) {
+		nt.AddChild(p.expression())
+	}
+
+	return nt
+}
+
+// insert parses a insert statement.
+func (p *Parser) insert() parsetree.NonTerminal {
+	// TODO: implement this method.
+	nt := parsetree.NewNonTerminal(parsetree.KindInsert)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.isStartOfExpression(p.tok[0]) {
+		nt.AddChild(p.expression())
+	}
+
+	return nt
+}
+
 // selectStatement parses a select statement.
 func (p *Parser) selectStatement() parsetree.NonTerminal {
 	// TODO: implement this method.
 	nt := parsetree.NewNonTerminal(parsetree.KindSelect)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.isStartOfExpression(p.tok[0]) {
+		nt.AddChild(p.expression())
+	}
+
+	return nt
+}
+
+// update parses a update statement.
+func (p *Parser) update() parsetree.NonTerminal {
+	// TODO: implement this method.
+	nt := parsetree.NewNonTerminal(parsetree.KindUpdate)
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
 
@@ -2942,22 +3165,28 @@ func commaList[I parsetree.Construction](p *Parser, itemMeaning string, item fun
 // commaList parses a list of items separated by commas. itemMeaning is the meaning of the item, item is the function
 // that parses a item, isItemStart is for the tokens that starts a item, isInFollowSet is for the tokens that follow the list.
 func commaListFunc[I parsetree.Construction](p *Parser, itemMeaning string, item func(p *Parser) I, isItemStart, isInFollowSet func(*token.Token) bool) parsetree.NonTerminal {
+	return listFunc(p, token.KindComma, itemMeaning, item, isItemStart, isInFollowSet)
+}
+
+// list parses a list of items separated by sep. itemMeaning is the meaning of the item, item is the function
+// that parses a item, isItemStart is for the tokens that starts a item, isInFollowSet is for the tokens that follow the list.
+func listFunc[I parsetree.Construction](p *Parser, sep token.Kind, itemMeaning string, item func(p *Parser) I, isItemStart, isInFollowSet func(*token.Token) bool) parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindCommaList)
 
 	var skipped bool
 
 	skipPred := func(t *token.Token) bool {
-		return isItemStart(t) || isInFollowSet(t) || t.Kind == token.KindComma
+		return isItemStart(t) || isInFollowSet(t) || t.Kind == sep
 	}
 
 	if isItemStart(p.tok[0]) {
 		nt.AddChild(item(p))
-	} else if p.tok[0].Kind == token.KindComma {
+	} else if p.tok[0].Kind == sep {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing `+itemMeaning)))
 	}
 
 	for !isInFollowSet(p.tok[0]) {
-		if p.tok[0].Kind == token.KindComma {
+		if p.tok[0].Kind == sep {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 			skipped = false
@@ -2974,7 +3203,7 @@ func commaListFunc[I parsetree.Construction](p *Parser, itemMeaning string, item
 		if isItemStart(p.tok[0]) {
 			nt.AddChild(item(p))
 			skipped = false
-		} else if p.tok[0].Kind == token.KindComma || isInFollowSet(p.tok[0]) {
+		} else if p.tok[0].Kind == sep || isInFollowSet(p.tok[0]) {
 			if !skipped {
 				nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing `+itemMeaning)))
 			}

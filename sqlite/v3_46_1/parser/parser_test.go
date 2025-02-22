@@ -700,10 +700,62 @@ func TestColumnNameList(t *testing.T) {
 	)
 
 	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.columnNameList([]token.Kind{token.KindRightParen, token.KindSemicolon, token.KindEOF})
+		return p.columnNameList(token.KindRightParen, token.KindSemicolon, token.KindEOF)
 	}
 
 	runTests(t, cases, fn)
+}
+
+func TestCreateTrigger(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE 10; END`,
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {T E{T}} TT}}",
+		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END`,
+		"CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}}",
+		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN a > 10 BEGIN UPDATE 10; END`,
+		"CreateTrigger{TT TriggerName TTTT TableName T E{GreaterThan{ColRef{ColName} T T}} TriggerBody{T Update {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name UPDATE OF a, b ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName TT CommaList{ColName T ColName} T TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName T !ErrorMissing TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE ON BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName TT !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10 END`,
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Select {T E{T}} !ErrorMissing T}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10; `,
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Select {T E{T}} T !ErrorMissing}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN ; END`,
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T !ErrorExpecting TT}}",
+		`CREATE TEMP TRIGGER IF EXISTS trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT T !ErrorMissing T TriggerName TTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMP TRIGGER IF NOT trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT TT !ErrorMissing TriggerName TTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT TTT TriggerName T !ErrorExpecting T TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMPORARY TRIGGER .trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT !ErrorMissing T TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMPORARY TRIGGER schema_name trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT SchemaName !ErrorMissing TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR ROW BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName T !ErrorMissing T TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`,
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TT !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName TT CommaList{ColName !ErrorMissing ColName} T TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName TTTT TableName T !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TT TriggerName T !ErrorMissing TT TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER INSTEAD OF UPDATE ON table_name BEGIN SELECT 10; END`,
+		"CreateTrigger{TT !ErrorMissing TTTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name`,
+		"CreateTrigger{TT TriggerName TT TableName !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).createTrigger)
 }
 
 func TestExpression(t *testing.T) {
@@ -1517,7 +1569,7 @@ func (c *comparator) compare(parsed, expected parsetree.Construction) bool {
 					strings.Repeat(c.indent, c.indentLevel), parsed.Kind(),
 					strings.Repeat(c.indent, c.indentLevel), expected.Kind(),
 				)
-				fmt.Fprintf(c.tw, "%T ≠ %T\n", parsed, expected)
+				fmt.Fprintf(c.tw, "%T ≠ %T <%s> \n", parsed, expected, p.Error())
 				return false
 			}
 
