@@ -83,9 +83,20 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 	case token.KindCreate:
 		if p.tok[1].Kind == token.KindIndex || p.tok[1].Kind == token.KindUnique {
 			father.AddChild(p.createIndex())
-		} else if p.tok[1].Kind == token.KindTable || p.tok[1].Kind == token.KindTemp ||
-			p.tok[1].Kind == token.KindTemporary {
+		} else if p.tok[1].Kind == token.KindTable {
 			father.AddChild(p.createTable())
+		} else if p.tok[1].Kind == token.KindTrigger {
+			father.AddChild(p.createTrigger())
+		} else if p.tok[1].Kind == token.KindView {
+			father.AddChild(p.createView())
+		} else if p.tok[1].Kind == token.KindTemp || p.tok[1].Kind == token.KindTemporary {
+			if p.tok[2].Kind == token.KindTable {
+				father.AddChild(p.createTable())
+			} else if p.tok[2].Kind == token.KindTrigger {
+				father.AddChild(p.createTrigger())
+			} else if p.tok[2].Kind == token.KindView {
+				father.AddChild(p.createView())
+			}
 		}
 	case token.KindSelect:
 		father.AddChild(p.selectStatement())
@@ -1465,6 +1476,93 @@ func (p *Parser) triggerBody() parsetree.NonTerminal {
 		p.advance()
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "END"`)))
+	}
+
+	return nt
+}
+
+// createView parses a create view statement.
+func (p *Parser) createView() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCreateView)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindTemp || p.tok[0].Kind == token.KindTemporary {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindNot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
+		}
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindViewName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindAs || p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing view name`)))
+	}
+
+	if p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		nt.AddChild(p.columnNameList(token.KindRightParen, token.KindSemicolon, token.KindAs, token.KindEOF))
+
+		if p.tok[0].Kind == token.KindRightParen {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindAs {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindSelect {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AS"`)))
+	}
+
+	if p.tok[0].Kind == token.KindSelect {
+		nt.AddChild(p.selectStatement())
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing select`)))
 	}
 
 	return nt

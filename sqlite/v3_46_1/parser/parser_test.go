@@ -68,6 +68,18 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement {CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
 		`SELECT 10;`,
 		"SQLStatement {Select {T E{T}} T}",
+		`CREATE TABLE table_name (column_a);`,
+		"SQLStatement{CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
+		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
+		"SQLStatement{CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T} T}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE 10; END;`,
+		"SQLStatement{CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {T E{T}} TT}} T}",
+		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END;`,
+		"SQLStatement{CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}} T}",
+		`CREATE VIEW view_name AS SELECT 10;`,
+		"SQLStatement{CreateView{TT ViewName T Select{T E{T}}} T}",
+		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10;`,
+		"SQLStatement{CreateView{TTT TTT ViewName T Select{T E{T}}} T}",
 		`SELECT 10 10;`,
 		"SQLStatement {Select {T E{T}} Skipped{T} T}",
 	)
@@ -756,6 +768,38 @@ func TestCreateTrigger(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).createTrigger)
+}
+
+func TestCreateViewr(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CREATE VIEW view_name AS SELECT 10`,
+		"CreateView{TT ViewName T Select{T E{T}}}",
+		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10`,
+		"CreateView{TTT TTT ViewName T Select{T E{T}}}",
+		`CREATE TEMPORARY VIEW schema_name.view_name (a, b) AS SELECT 10`,
+		"CreateView{TTT SchemaName T ViewName  T CommaList{ColName T ColName} T T Select{T E{T}}}",
+		`CREATE TEMP VIEW IF EXISTS view_name AS SELECT 10`,
+		"CreateView{TTT T !ErrorMissing T ViewName T Select{T E{T}}}",
+		`CREATE TEMP VIEW IF NOT view_name AS SELECT 10`,
+		"CreateView{TTT TT !ErrorMissing ViewName T Select{T E{T}}}",
+		`CREATE TEMP VIEW AS SELECT 10`,
+		"CreateView{TTT !ErrorMissing T Select{T E{T}}}",
+		`CREATE TEMP VIEW schema_name view_name AS SELECT 10`,
+		"CreateView{TTT SchemaName !ErrorMissing ViewName T Select{T E{T}}}",
+		`CREATE TEMP VIEW view_name AS `,
+		"CreateView{TTT ViewName T !ErrorMissing}",
+		`CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`,
+		"CreateView{TTT ViewName  T CommaList{ColName !ErrorMissing ColName} T T Select{T E{T}}}",
+		`CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`,
+		"CreateView{TTT ViewName  T CommaList{ColName T ColName} !ErrorMissing T Select{T E{T}}}",
+		`CREATE TEMP VIEW view_name SELECT 10`,
+		"CreateView{TTT ViewName !ErrorMissing Select{T E{T}}}",
+		`CREATE VIEW .view_name AS SELECT 10`,
+		"CreateView{TT !ErrorMissing T ViewName T Select{T E{T}}}",
+	)
+
+	runTests(t, cases, (*Parser).createView)
 }
 
 func TestExpression(t *testing.T) {

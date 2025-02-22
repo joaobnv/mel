@@ -42,6 +42,7 @@ const (
 	KindCreateIndex
 	KindCreateTable
 	KindCreateTrigger
+	KindCreateView
 	KindDefaultColumnConstraint
 	KindDelete
 	KindDivide
@@ -133,6 +134,7 @@ const (
 	KindUniqueColumnConstraint
 	KindUniqueTableConstraint
 	KindUpdate
+	KindViewName
 	KindWhen
 	KindWindowName
 )
@@ -150,7 +152,7 @@ func (k Kind) String() string {
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
 	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit",
-	"Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "DefaultColumnConstraint", "Delete", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
+	"Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "DefaultColumnConstraint", "Delete", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
 	"ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2", "FilterClause",
 	"ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob",
 	"GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift",
@@ -158,7 +160,7 @@ var kindStrings = []string{
 	"Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint",
 	"Raise", "Regexp", "RenameColumn", "RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped",
 	"SQLStatement", "Subtract", "TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint",
-	"Update", "When", "WindowName",
+	"Update", "ViewName", "When", "WindowName",
 }
 
 // Construction is a construction in SQL grammar.
