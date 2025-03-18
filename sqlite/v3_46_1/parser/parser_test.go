@@ -770,7 +770,7 @@ func TestCreateTrigger(t *testing.T) {
 	runTests(t, cases, (*Parser).createTrigger)
 }
 
-func TestCreateViewr(t *testing.T) {
+func TestCreateView(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`CREATE VIEW view_name AS SELECT 10`,
@@ -800,6 +800,46 @@ func TestCreateViewr(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).createView)
+}
+
+func TestCreateVirtualTable(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`CREATE VIRTUAL TABLE table_name USING module_name`,
+		"CreateVirtualTable{TTT TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE IF NOT EXISTS table_name USING module_name`,
+		"CreateVirtualTable{TTT TTT TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE temp.table_name USING module_name`,
+		"CreateVirtualTable{TTT SchemaName T TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE table_name USING module_name(column1 TEXT, column2 INTEGER)`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TT} T ModuleArgument{TT}} T}",
+		`CREATE VIRTUAL TABLE table_name USING module_name(function(arg))`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTT}} T}",
+		`CREATE VIRTUAL TABLE table_name USING module_name(function(function(arg)))`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTTTTT}} T}",
+		`CREATE VIRTUAL table_name USING module_name`,
+		"CreateVirtualTable{TT !ErrorMissing TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE IF EXISTS table_name USING module_name`,
+		"CreateVirtualTable{TTT T !ErrorMissing T TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE IF NOT table_name USING module_name`,
+		"CreateVirtualTable{TTT TT !ErrorMissing TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE .table_name USING module_name`,
+		"CreateVirtualTable{TTT !ErrorMissing T TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE schema_name. USING module_name`,
+		"CreateVirtualTable{TTT SchemaName T !ErrorMissing T ModuleName}",
+		`CREATE VIRTUAL TABLE schema_name table_name USING module_name`,
+		"CreateVirtualTable{TTT SchemaName !ErrorMissing TableName T ModuleName}",
+		`CREATE VIRTUAL TABLE schema_name.table_name module_name`,
+		"CreateVirtualTable{TTT SchemaName T TableName !ErrorMissing ModuleName}",
+		`CREATE VIRTUAL TABLE table_name USING`,
+		"CreateVirtualTable{TTT TableName T !ErrorMissing}",
+		`CREATE VIRTUAL TABLE table_name USING module_name()`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{!ErrorMissing} T}",
+		`CREATE VIRTUAL TABLE table_name USING module_name(function(arg`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTT}} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).createVirtualTable)
 }
 
 func TestExpression(t *testing.T) {
@@ -1771,18 +1811,6 @@ func (c *comparator) compareErrors(parsed, expected parsetree.Error) bool {
 func (c *comparator) log() string {
 	c.tw.Flush()
 	return c.b.String()
-}
-
-// writeErrors writes to b errors messages in c.
-func writeErrors(b *strings.Builder, c parsetree.Construction) {
-	switch c := c.(type) {
-	case parsetree.NonTerminal:
-		for child := range c.Children {
-			writeErrors(b, child)
-		}
-	case parsetree.Error:
-		b.WriteString(c.Error() + "\n")
-	}
 }
 
 // testTokenKind is the kind of a token in the language for especifying a parse tree.

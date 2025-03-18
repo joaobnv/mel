@@ -1,3 +1,3 @@
 module github.com/joaobnv/mel
 
-go 1.24rc1
+go 1.24.1

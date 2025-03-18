@@ -50,14 +50,14 @@ func TestParseTree(t *testing.T) {
 }
 
 func TestKindString(t *testing.T) {
-	if KindWindowName.String() != "WindowName" {
-		fmt.Printf("want %s, got %s", "WindowName", KindWindowName)
-		t.Fail()
+	for i := KindAdd; i <= KindWindowName; i++ {
+		if i.String() != kindStrings[i] {
+			t.Errorf("i.String() = %q, kindStrings[] = %q", i.String(), kindStrings[i])
+		}
 	}
 
-	k := Kind(-1)
+	var k Kind = -1
 	if k.String() != "-1" {
-		fmt.Printf("want %s, got %s", "-1", k)
-		t.Fail()
+		t.Errorf("want \"-1\", got %q", k.String())
 	}
 }

@@ -1568,6 +1568,165 @@ func (p *Parser) createView() parsetree.NonTerminal {
 	return nt
 }
 
+// createVirtualTable parses a create virtual table statement.
+func (p *Parser) createVirtualTable() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCreateVirtualTable)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindTable {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindIf || p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "TABLE"`)))
+	}
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindNot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
+		}
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindUsing {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
+	}
+
+	if p.tok[0].Kind == token.KindUsing {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "USING"`)))
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindModuleName, p.tok[0]))
+		p.advance()
+	} else if p.tok[0].Kind == token.KindLeftParen || p.tok[0].Kind == token.KindSemicolon || p.tok[0].Kind == token.KindEOF {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing module name`)))
+	}
+
+	if p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		nt.AddChild(p.moduleArgumentList())
+
+		if p.tok[0].Kind == token.KindRightParen {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
+		}
+	}
+
+	return nt
+}
+
+// moduleArgumentList parses a list of module arguments separated by comma.
+func (p *Parser) moduleArgumentList() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindCommaList)
+
+	if p.tok[0].Kind == token.KindRightParen {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing module argument`)))
+		return nt
+	}
+
+	for {
+		nt.AddChild(p.moduleArgument())
+
+		switch p.tok[0].Kind {
+		case token.KindRightParen, token.KindEOF:
+			return nt
+		case token.KindComma:
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		}
+	}
+}
+
+// moduleArgument parses a module argument in a create virtual table statement.
+func (p *Parser) moduleArgument() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindModuleArgument)
+	for {
+		switch p.tok[0].Kind {
+		case token.KindComma, token.KindRightParen, token.KindEOF:
+			return nt
+		case token.KindLeftParen:
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+			p.moduleArgumentInner(nt)
+			if p.tok[0].Kind == token.KindRightParen {
+				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+				p.advance()
+			} else {
+				return nt
+			}
+		default:
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		}
+	}
+}
+
+// moduleArgumentInner parses a part of a module argument. The part is delimited by parenthesis.
+func (p *Parser) moduleArgumentInner(nt parsetree.NonTerminal) {
+	for {
+		switch p.tok[0].Kind {
+		case token.KindRightParen, token.KindEOF:
+			return
+		case token.KindLeftParen:
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+			p.moduleArgumentInner(nt)
+			if p.tok[0].Kind == token.KindRightParen {
+				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+				p.advance()
+			} else {
+				return
+			}
+		default:
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		}
+	}
+}
+
 // delete parses a delete statement.
 func (p *Parser) delete() parsetree.NonTerminal {
 	// TODO: implement this method.
@@ -1998,8 +2157,7 @@ func (p *Parser) isExpression(exp parsetree.Construction) parsetree.NonTerminal 
 
 // between parses a between expression.
 func (p *Parser) between(exp parsetree.Construction) parsetree.NonTerminal {
-	var nt parsetree.NonTerminal
-	nt = parsetree.NewNonTerminal(parsetree.KindBetween)
+	nt := parsetree.NewNonTerminal(parsetree.KindBetween)
 	nt.AddChild(exp)
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
@@ -2028,8 +2186,7 @@ func (p *Parser) between(exp parsetree.Construction) parsetree.NonTerminal {
 
 // notBetween parses a not between expression.
 func (p *Parser) notBetween(exp parsetree.Construction) parsetree.NonTerminal {
-	var nt parsetree.NonTerminal
-	nt = parsetree.NewNonTerminal(parsetree.KindNotBetween)
+	nt := parsetree.NewNonTerminal(parsetree.KindNotBetween)
 	nt.AddChild(exp)
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
@@ -2060,8 +2217,7 @@ func (p *Parser) notBetween(exp parsetree.Construction) parsetree.NonTerminal {
 
 // in parses a in expression.
 func (p *Parser) in(exp parsetree.Construction) parsetree.NonTerminal {
-	var nt parsetree.NonTerminal
-	nt = parsetree.NewNonTerminal(parsetree.KindIn)
+	nt := parsetree.NewNonTerminal(parsetree.KindIn)
 	nt.AddChild(exp)
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()
@@ -2137,8 +2293,7 @@ func (p *Parser) in(exp parsetree.Construction) parsetree.NonTerminal {
 
 // notIn parses a not in expression.
 func (p *Parser) notIn(exp parsetree.Construction) parsetree.NonTerminal {
-	var nt parsetree.NonTerminal
-	nt = parsetree.NewNonTerminal(parsetree.KindNotIn)
+	nt := parsetree.NewNonTerminal(parsetree.KindNotIn)
 	nt.AddChild(exp)
 	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 	p.advance()

@@ -43,6 +43,7 @@ const (
 	KindCreateTable
 	KindCreateTrigger
 	KindCreateView
+	KindCreateVirtualTable
 	KindDefaultColumnConstraint
 	KindDelete
 	KindDivide
@@ -87,6 +88,8 @@ const (
 	KindLike
 	KindMatch
 	KindMod
+	KindModuleArgument
+	KindModuleName
 	KindMultiply
 	KindNegate
 	KindNot
@@ -151,15 +154,17 @@ func (k Kind) String() string {
 // representation.
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
-	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit",
-	"Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "DefaultColumnConstraint", "Delete", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
+	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnConstraint", "ColumnDefinition",
+	"ColumnName", "ColumnReference", "CommaList", "Commit", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger",
+	"CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
 	"ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2", "FilterClause",
-	"ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob",
-	"GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift",
-	"LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch",
-	"Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint",
-	"Raise", "Regexp", "RenameColumn", "RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped",
-	"SQLStatement", "Subtract", "TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint",
+	"ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
+	"FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is", "IsDistinctFrom",
+	"IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "ModuleArgument", "ModuleName", "Multiply", "Negate", "Not", "NotBetween",
+	"NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch", "Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderBy", "OrderingTerm",
+	"OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "Raise", "Regexp", "RenameColumn",
+	"RenameTo", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableConstraint",
+	"TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint",
 	"Update", "ViewName", "When", "WindowName",
 }
 
