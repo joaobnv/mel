@@ -87,6 +87,8 @@ func TestSQLStatement(t *testing.T) {
 		`WITH cte AS (SELECT 10) DELETE FROM tableName`,
 		`SQLStatement{Delete{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
 			TT QualifiedTableName{TableName}} T}`,
+		`DETACH temp`,
+		"SQLStatement{Detach{T SchemaName} T}",
 		`SELECT 10 10;`,
 		"SQLStatement {Select {T E{T}} Skipped{T} T}",
 		`WITH cte AS (SELECT 10) `,
@@ -979,6 +981,17 @@ func TestReturningClause(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).returningClause)
+}
+
+func TestDetach(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DETACH temp`, "Detach{T SchemaName}",
+		`DETACH DATABASE temp`, "Detach{TT SchemaName}",
+		`DETACH`, "Detach{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).detach)
 }
 
 func TestExpression(t *testing.T) {

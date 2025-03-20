@@ -102,6 +102,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		}
 	case token.KindDelete:
 		father.AddChild(p.delete(nil))
+	case token.KindDetach:
+		father.AddChild(p.detach())
 	case token.KindSelect:
 		father.AddChild(p.selectStatement())
 	case token.KindWith:
@@ -2023,6 +2025,27 @@ func (p *Parser) returningItem() parsetree.NonTerminal {
 	} else if p.tok[0].Kind == token.KindAsterisk {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
+	}
+
+	return nt
+}
+
+// detach parses a detach statement.
+func (p *Parser) detach() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindDetach)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindDatabase {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
 	}
 
 	return nt
