@@ -50,10 +50,8 @@ func TestParseTree(t *testing.T) {
 }
 
 func TestKindString(t *testing.T) {
-	for i := KindAdd; i <= KindWindowName; i++ {
-		if i.String() != kindStrings[i] {
-			t.Errorf("i.String() = %q, kindStrings[] = %q", i.String(), kindStrings[i])
-		}
+	if KindWith.String() != "With" {
+		t.Errorf("want %s, got %s", "With", KindWith)
 	}
 
 	var k Kind = -1

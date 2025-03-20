@@ -72,16 +72,26 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
 		"SQLStatement{CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T} T}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE 10; END;`,
-		"SQLStatement{CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {T E{T}} TT}} T}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE FROM table_name; END;`,
+		"SQLStatement{CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {TT QualifiedTableName{TableName}} TT}} T}",
 		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END;`,
 		"SQLStatement{CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}} T}",
 		`CREATE VIEW view_name AS SELECT 10;`,
 		"SQLStatement{CreateView{TT ViewName T Select{T E{T}}} T}",
 		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10;`,
 		"SQLStatement{CreateView{TTT TTT ViewName T Select{T E{T}}} T}",
+		`CREATE VIRTUAL TABLE table_name USING module_name`,
+		"SQLStatement{CreateVirtualTable{TTT TableName T ModuleName} T}",
+		`DELETE FROM tableName`,
+		"SQLStatement{Delete{TT QualifiedTableName{TableName}} T}",
+		`WITH cte AS (SELECT 10) DELETE FROM tableName`,
+		`SQLStatement{Delete{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+			TT QualifiedTableName{TableName}} T}`,
 		`SELECT 10 10;`,
 		"SQLStatement {Select {T E{T}} Skipped{T} T}",
+		`WITH cte AS (SELECT 10) `,
+		`SQLStatement{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+			!ErrorExpecting T}}`,
 	)
 
 	for i, c := range cases {
@@ -562,6 +572,10 @@ func TestCreateTable(t *testing.T) {
 			ColConstr {PrimaryKeyColumnConstraint{TT}} }} T}`,
 		`CREATE TABLE table_a (column_b) WITHOUT ROWID`,
 		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T CommaList{TableOption{TT}}}`,
+		`CREATE TABLE table_a (column_b, CONSTRAINT cons_name CHECK(column_b > 10)) WITHOUT ROWID`,
+		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T
+			CommaList{TableConstraint{T ConstraintName CheckTableConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}}}
+			T CommaList{TableOption{TT}}}`,
 		`CREATE TABLE table_a`,
 		`CreateTable {TT TableName !ErrorExpecting}`,
 		`CREATE TABLE IF EXISTS table_name (column_a INTEGER);`,
@@ -721,8 +735,11 @@ func TestColumnNameList(t *testing.T) {
 func TestCreateTrigger(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE 10; END`,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE FROM table_name; END`,
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {TT QualifiedTableName{TableName}} TT}}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) DELETE FROM table_name; END`,
+		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T }}}
+			TT QualifiedTableName{TableName}} TT}}`,
 		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END`,
 		"CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}}",
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
@@ -835,11 +852,133 @@ func TestCreateVirtualTable(t *testing.T) {
 		"CreateVirtualTable{TTT TableName T !ErrorMissing}",
 		`CREATE VIRTUAL TABLE table_name USING module_name()`,
 		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{!ErrorMissing} T}",
-		`CREATE VIRTUAL TABLE table_name USING module_name(function(arg`,
-		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTT}} !ErrorMissing}",
+		`CREATE VIRTUAL TABLE table_name USING module_name(function(function(`,
+		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTT}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).createVirtualTable)
+}
+
+func TestDelete(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DELETE FROM table_name`,
+		"Delete{TT QualifiedTableName{TableName}}",
+		`DELETE FROM table_name WHERE a > b`,
+		"Delete{TT QualifiedTableName{TableName} Where{T E{GreaterThan{ColRef{ColName} T ColRef{ColName}}}}}",
+		`DELETE FROM table_name RETURNING *`,
+		"Delete{TT QualifiedTableName{TableName} ReturningClause{T CommaList{ReturningItem{T}}}}",
+		`DELETE table_name`,
+		"Delete{T !ErrorMissing QualifiedTableName{TableName}}",
+		`DELETE FROM`,
+		"Delete{TT !ErrorMissing}",
+		`DELETE FROM table_name WHERE`,
+		"Delete{TT QualifiedTableName{TableName} Where{T !ErrorMissing}}",
+		`DELETE FROM table_name RETURNING`,
+		"Delete{TT QualifiedTableName{TableName} ReturningClause{T !ErrorMissing}}",
+	)
+
+	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
+}
+
+func TestWith(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`WITH table_name AS (SELECT 10)`,
+		"With{T CommaList{CommonTableExpression{TableName TT Select{T E{T}} T}}}",
+		`WITH RECURSIVE table_name AS (SELECT 10)`,
+		"With{TT CommaList{CommonTableExpression{TableName TT Select{T E{T}} T}}}",
+		`WITH table_name AS (SELECT 10), table_name2 AS (SELECT 10)`,
+		`With{T CommaList{CommonTableExpression{TableName TT Select{T E{T}} T} T
+					CommonTableExpression{TableName TT Select{T E{T}} T}}}`,
+		`WITH `,
+		"With{T !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).with)
+}
+
+func TestCommonTableExpression(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`table_name AS (SELECT 10)`,
+		"CommonTableExpression{TableName T T Select{T E{T}} T}",
+		`table_name AS MATERIALIZED (SELECT 10)`,
+		"CommonTableExpression{TableName TT T Select{T E{T}} T}",
+		`table_name AS NOT MATERIALIZED (SELECT 10)`,
+		"CommonTableExpression{TableName T TT T Select{T E{T}} T}",
+		`table_name (col_a, col_b) AS (SELECT 10)`,
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} T T T Select{T E{T}} T}",
+		`table_name (col_a, col_b AS (SELECT 10)`,
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} !ErrorMissing T T Select{T E{T}} T}",
+		`table_name AS SELECT 10)`,
+		"CommonTableExpression{TableName T !ErrorMissing Select{T E{T}} T}",
+		`table_name AS (SELECT 10`,
+		"CommonTableExpression{TableName T T Select{T E{T}} !ErrorMissing}",
+		`table_name (col_a, col_b) (SELECT 10)`,
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} T !ErrorMissing T Select{T E{T}} T}",
+		`table_name AS NOT (SELECT 10)`,
+		"CommonTableExpression{TableName T T !ErrorMissing T Select{T E{T}} T}",
+		`table_name AS ()`,
+		"CommonTableExpression{TableName T T !ErrorMissing T}",
+	)
+
+	runTests(t, cases, (*Parser).commonTableExpression)
+}
+
+func TestQualifiedTableName(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`table_name`,
+		"QualifiedTableName{TableName}",
+		`table_name AS alias_name`,
+		"QualifiedTableName{TableName T TableAlias}",
+		`schema_name.table_name AS alias_name`,
+		"QualifiedTableName{SchemaName T TableName T TableAlias}",
+		`table_name INDEXED BY index_name`,
+		"QualifiedTableName{TableName TT IndexName}",
+		`table_name NOT INDEXED`,
+		"QualifiedTableName{TableName TT}",
+		`Schema_name.`,
+		"QualifiedTableName{SchemaName T !ErrorMissing}",
+		`.table_name`,
+		"QualifiedTableName{!ErrorMissing T TableName}",
+		`schema_name table_name`,
+		"QualifiedTableName{SchemaName !ErrorMissing TableName}",
+		`table_name AS`,
+		"QualifiedTableName{TableName T !ErrorMissing}",
+		`table_name INDEXED index_name`,
+		"QualifiedTableName{TableName T !ErrorMissing IndexName}",
+		`table_name INDEXED BY`,
+		"QualifiedTableName{TableName TT !ErrorMissing}",
+		`table_name NOT`,
+		"QualifiedTableName{TableName T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).qualifiedTableName)
+}
+
+func TestReturningClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`RETURNING *`,
+		"ReturningClause{T CommaList{ReturningItem{T}}}",
+		`RETURNING a`,
+		"ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}}}}}",
+		`RETURNING a AS b`,
+		"ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} T ColumnAlias}}}",
+		`RETURNING a b`,
+		"ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} ColumnAlias}}}",
+		`RETURNING a AS b, c`,
+		`ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} T ColumnAlias}
+			T ReturningItem{E{ColRef{ColName}}}}}`,
+		`RETURNING`,
+		"ReturningClause{T !ErrorMissing}",
+		`RETURNING a AS`,
+		"ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} T !ErrorMissing}}}",
+	)
+
+	runTests(t, cases, (*Parser).returningClause)
 }
 
 func TestExpression(t *testing.T) {
@@ -2008,7 +2147,7 @@ var treeKinds = map[string]parsetree.Kind{}
 
 // init initializes treeKinds.
 func init() {
-	for i := parsetree.KindAdd; i <= parsetree.KindWindowName; i++ {
+	for i := parsetree.KindAdd; i <= parsetree.KindWith; i++ {
 		treeKinds[i.String()] = i
 	}
 	treeKinds["E"] = parsetree.KindExpression
