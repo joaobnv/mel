@@ -89,6 +89,10 @@ func TestSQLStatement(t *testing.T) {
 			TT QualifiedTableName{TableName}} T}`,
 		`DETACH temp`,
 		"SQLStatement{Detach{T SchemaName} T}",
+		`DROP INDEX index_name`,
+		"SQLStatement{DropIndex{TT IndexName} T}",
+		`DROP`,
+		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
 		"SQLStatement {Select {T E{T}} Skipped{T} T}",
 		`WITH cte AS (SELECT 10) `,
@@ -992,6 +996,21 @@ func TestDetach(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).detach)
+}
+
+func TestDropIndex(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DROP INDEX index_name`, "DropIndex{TT IndexName}",
+		`DROP INDEX IF EXISTS index_name`, "DropIndex{TT TT IndexName}",
+		`DROP INDEX tem.index_name`, "DropIndex{TT SchemaName T IndexName}",
+		`DROP INDEX IF index_name`, "DropIndex{TT T !ErrorMissing IndexName}",
+		`DROP INDEX .index_name`, "DropIndex{TT !ErrorMissing T IndexName}",
+		`DROP INDEX schema_name.`, "DropIndex{TT SchemaName T !ErrorMissing}",
+		`DROP INDEX schema_name index_name`, "DropIndex{TT SchemaName !ErrorMissing IndexName}",
+	)
+
+	runTests(t, cases, (*Parser).dropIndex)
 }
 
 func TestExpression(t *testing.T) {

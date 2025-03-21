@@ -51,6 +51,7 @@ const (
 	KindDetach
 	KindDivide
 	KindDropColumn
+	KindDropIndex
 	KindElse
 	KindEqual
 	KindErrorExpecting // is for when there was more than one possibility
@@ -164,18 +165,18 @@ func (k Kind) String() string {
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
 	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnAlias", "ColumnConstraint", "ColumnDefinition",
-	"ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger",
-	"CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "Else", "Equal", "ErrorExpecting", "ErrorMessage",
-	"ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2", "FilterClause",
-	"ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall",
-	"FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is", "IsDistinctFrom",
-	"IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "ModuleArgument", "ModuleName", "Multiply", "Negate",
-	"Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch", "Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderBy",
-	"OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName",
-	"Raise", "Regexp", "RenameColumn", "RenameTo", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SavepointName", "SchemaIndexOrTableName",
-	"SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableAlias", "TableConstraint", "TableFunctionName", "TableName", "TableOption",
-	"TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "ViewName", "When",
-	"Where", "WindowName", "With",
+	"ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex",
+	"CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex",
+	"Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1",
+	"Extract2", "FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments",
+	"FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is",
+	"IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "ModuleArgument", "ModuleName",
+	"Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch", "Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp",
+	"Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint",
+	"QualifiedTableName", "Raise", "Regexp", "RenameColumn", "RenameTo", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SavepointName",
+	"SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "SQLStatement", "Subtract", "TableAlias", "TableConstraint", "TableFunctionName", "TableName",
+	"TableOption", "TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "ViewName",
+	"When", "Where", "WindowName", "With",
 }
 
 // Construction is a construction in SQL grammar.
