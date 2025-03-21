@@ -52,6 +52,7 @@ const (
 	KindDivide
 	KindDropColumn
 	KindDropIndex
+	KindDropTable
 	KindElse
 	KindEqual
 	KindErrorExpecting // is for when there was more than one possibility
@@ -166,7 +167,7 @@ var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
 	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnAlias", "ColumnConstraint", "ColumnDefinition",
 	"ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex",
-	"CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex",
+	"CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable",
 	"Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1",
 	"Extract2", "FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments",
 	"FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexedColumn", "IndexName", "Insert", "Is",

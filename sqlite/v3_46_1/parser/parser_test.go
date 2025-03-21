@@ -91,6 +91,8 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{Detach{T SchemaName} T}",
 		`DROP INDEX index_name`,
 		"SQLStatement{DropIndex{TT IndexName} T}",
+		`DROP TABLE table_name`,
+		"SQLStatement{DropTable{TT TableName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1003,7 +1005,7 @@ func TestDropIndex(t *testing.T) {
 	cases := testCases(
 		`DROP INDEX index_name`, "DropIndex{TT IndexName}",
 		`DROP INDEX IF EXISTS index_name`, "DropIndex{TT TT IndexName}",
-		`DROP INDEX tem.index_name`, "DropIndex{TT SchemaName T IndexName}",
+		`DROP INDEX temp.index_name`, "DropIndex{TT SchemaName T IndexName}",
 		`DROP INDEX IF index_name`, "DropIndex{TT T !ErrorMissing IndexName}",
 		`DROP INDEX .index_name`, "DropIndex{TT !ErrorMissing T IndexName}",
 		`DROP INDEX schema_name.`, "DropIndex{TT SchemaName T !ErrorMissing}",
@@ -1011,6 +1013,21 @@ func TestDropIndex(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).dropIndex)
+}
+
+func TestDropTable(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DROP TABLE table_name`, "DropTable{TT TableName}",
+		`DROP TABLE IF EXISTS table_name`, "DropTable{TT TT TableName}",
+		`DROP TABLE temp.table_name`, "DropTable{TT SchemaName T TableName}",
+		`DROP TABLE IF table_name`, "DropTable{TT T !ErrorMissing TableName}",
+		`DROP TABLE .table_name`, "DropTable{TT !ErrorMissing T TableName}",
+		`DROP TABLE schema_name.`, "DropTable{TT SchemaName T !ErrorMissing}",
+		`DROP TABLE schema_name table_name`, "DropTable{TT SchemaName !ErrorMissing TableName}",
+	)
+
+	runTests(t, cases, (*Parser).dropTable)
 }
 
 func TestExpression(t *testing.T) {

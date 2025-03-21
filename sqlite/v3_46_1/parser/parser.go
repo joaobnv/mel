@@ -107,11 +107,13 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 	case token.KindDrop:
 		if p.tok[1].Kind == token.KindIndex {
 			father.AddChild(p.dropIndex())
+		} else if p.tok[1].Kind == token.KindTable {
+			father.AddChild(p.dropTable())
 		} else {
 			father.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
 			// TODO: Update this list when other DROP constructs have parse methods.
-			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "INDEX"`)))
+			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "INDEX", or "TABLE"`)))
 		}
 	case token.KindSelect:
 		father.AddChild(p.selectStatement())
@@ -2103,6 +2105,54 @@ func (p *Parser) dropIndex() parsetree.NonTerminal {
 		p.advance()
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing index name`)))
+	}
+
+	return nt
+}
+
+// dropTable parses a drop table statement.
+func (p *Parser) dropTable() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindDropTable)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
 	}
 
 	return nt
