@@ -111,11 +111,12 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 			father.AddChild(p.dropTable())
 		} else if p.tok[1].Kind == token.KindTrigger {
 			father.AddChild(p.dropTrigger())
+		} else if p.tok[1].Kind == token.KindView {
+			father.AddChild(p.dropView())
 		} else {
 			father.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
-			// TODO: Update this list when other DROP constructs have parse methods.
-			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "INDEX", "TABLE", or "TRIGGER"`)))
+			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "INDEX", "TABLE", "TRIGGER", OR "VIEW"`)))
 		}
 	case token.KindSelect:
 		father.AddChild(p.selectStatement())
@@ -2203,6 +2204,54 @@ func (p *Parser) dropTrigger() parsetree.NonTerminal {
 		p.advance()
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing trigger name`)))
+	}
+
+	return nt
+}
+
+// dropView parses a drop view statement.
+func (p *Parser) dropView() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindDropView)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIf {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindExists {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindViewName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing view name`)))
 	}
 
 	return nt

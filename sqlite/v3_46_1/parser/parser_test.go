@@ -93,8 +93,10 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{DropIndex{TT IndexName} T}",
 		`DROP TABLE table_name`,
 		"SQLStatement{DropTable{TT TableName} T}",
-		`DROP TRIGGER table_name`,
+		`DROP TRIGGER trigger_name`,
 		"SQLStatement{DropTrigger{TT TriggerName} T}",
+		`DROP VIEW view_name`,
+		"SQLStatement{DropView{TT ViewName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1045,6 +1047,21 @@ func TestDropTrigger(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).dropTrigger)
+}
+
+func TestDropView(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DROP VIEW view_name`, "DropView{TT ViewName}",
+		`DROP VIEW IF EXISTS view_name`, "DropView{TT TT ViewName}",
+		`DROP VIEW temp.view_name`, "DropView{TT SchemaName T ViewName}",
+		`DROP VIEW IF view_name`, "DropView{TT T !ErrorMissing ViewName}",
+		`DROP VIEW .view_name`, "DropView{TT !ErrorMissing T ViewName}",
+		`DROP VIEW schema_name.`, "DropView{TT SchemaName T !ErrorMissing}",
+		`DROP VIEW schema_name view_name`, "DropView{TT SchemaName !ErrorMissing ViewName}",
+	)
+
+	runTests(t, cases, (*Parser).dropView)
 }
 
 func TestExpression(t *testing.T) {
