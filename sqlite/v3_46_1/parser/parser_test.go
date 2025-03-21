@@ -93,6 +93,8 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{DropIndex{TT IndexName} T}",
 		`DROP TABLE table_name`,
 		"SQLStatement{DropTable{TT TableName} T}",
+		`DROP TRIGGER table_name`,
+		"SQLStatement{DropTrigger{TT TriggerName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1028,6 +1030,21 @@ func TestDropTable(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).dropTable)
+}
+
+func TestDropTrigger(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`DROP TRIGGER trigger_name`, "DropTrigger{TT TriggerName}",
+		`DROP TRIGGER IF EXISTS trigger_name`, "DropTrigger{TT TT TriggerName}",
+		`DROP TRIGGER temp.trigger_name`, "DropTrigger{TT SchemaName T TriggerName}",
+		`DROP TRIGGER IF trigger_name`, "DropTrigger{TT T !ErrorMissing TriggerName}",
+		`DROP TRIGGER .trigger_name`, "DropTrigger{TT !ErrorMissing T TriggerName}",
+		`DROP TRIGGER schema_name.`, "DropTrigger{TT SchemaName T !ErrorMissing}",
+		`DROP TRIGGER schema_name trigger_name`, "DropTrigger{TT SchemaName !ErrorMissing TriggerName}",
+	)
+
+	runTests(t, cases, (*Parser).dropTrigger)
 }
 
 func TestExpression(t *testing.T) {
