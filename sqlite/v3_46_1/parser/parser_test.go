@@ -74,8 +74,9 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T} T}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE FROM table_name; END;`,
 		"SQLStatement{CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {TT QualifiedTableName{TableName}} TT}} T}",
-		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END;`,
-		"SQLStatement{CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}} T}",
+		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT INTO table_name(name) VALUES('Go'); END;`,
+		`SQLStatement{CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}} } TT}} T}`,
 		`CREATE VIEW view_name AS SELECT 10;`,
 		"SQLStatement{CreateView{TT ViewName T Select{T E{T}}} T}",
 		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10;`,
@@ -97,6 +98,13 @@ func TestSQLStatement(t *testing.T) {
 		"SQLStatement{DropTrigger{TT TriggerName} T}",
 		`DROP VIEW view_name`,
 		"SQLStatement{DropView{TT ViewName} T}",
+		`WITH cte AS (SELECT 10) INSERT INTO table_name(name) VALUES('Go')`,
+		`SQLStatement{Insert{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+			TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
+		`INSERT INTO table_name(name) VALUES('Go')`,
+		`SQLStatement{Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -752,8 +760,9 @@ func TestCreateTrigger(t *testing.T) {
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) DELETE FROM table_name; END`,
 		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T }}}
 			TT QualifiedTableName{TableName}} TT}}`,
-		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT 10; END`,
-		"CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert {T E{T}} TT}}",
+		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT INTO table_name(name) VALUES('Go'); END;`,
+		`CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}} } TT}}`,
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
 		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
 		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN a > 10 BEGIN UPDATE 10; END`,
@@ -1781,6 +1790,129 @@ func TestRaise(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).raise)
+}
+
+func TestInsert(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`INSERT INTO table_name(name) VALUES('Go')`,
+		`Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT OR ABORT INTO temp.table_name(name) VALUES('Go')`,
+		`Insert{T TT T SchemaName T TableName T CommaList{ColumnName} T T
+		 	InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT OR FAIL INTO table_name AS table_alias (name) VALUES('Go')`,
+		`Insert{T TT T TableName T TableAlias T CommaList{ColumnName} T T
+		 	InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO table_name(name) VALUES('Go') ON CONFLICT DO NOTHING`,
+		`Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}
+			UpsertClause{UpsertClauseItem{TT TT}}}`,
+		`INSERT INTO table_name(name) SELECT 'Go'`,
+		"Insert{TT TableName T CommaList{ColumnName} T Select{T E{T}}}",
+		`INSERT INTO table_name(name) SELECT 'Go' ON CONFLICT DO NOTHING`,
+		"Insert{TT TableName T CommaList{ColumnName} T Select{T E{T}} UpsertClause{UpsertClauseItem{TT TT}}}",
+		`INSERT INTO table_name(name) DEFAULT VALUES`,
+		"Insert{TT TableName T CommaList{ColumnName} T TT}",
+		`INSERT INTO table_name(name) DEFAULT VALUES RETURNING *`,
+		"Insert{TT TableName T CommaList{ColumnName} T TT ReturningClause{T CommaList{ReturningItem{T}}}}",
+		`INSERT OR INTO table_name(name) VALUES('Go')`,
+		`Insert{T T !ErrorExpecting T TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT table_name(name) VALUES('Go')`,
+		`Insert{T !ErrorMissing TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO AS table_alias (name) VALUES('Go')`,
+		`Insert{TT !ErrorMissing T TableAlias T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO .table_name (name) VALUES('Go')`,
+		`Insert{TT !ErrorMissing T TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO schema_name table_name(name) VALUES('Go')`,
+		`Insert{TT SchemaName !ErrorMissing TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT OR FAIL INTO table_name AS (name) VALUES('Go')`,
+		`Insert{T TT T TableName T !ErrorMissing T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO table_name(name VALUES('Go')`,
+		`Insert{TT TableName T CommaList{ColumnName} !ErrorMissing T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO temp.table_name name) VALUES('Go')`,
+		`Insert{TT SchemaName T TableName !ErrorExpecting}`,
+		`INSERT INTO table_name(name VALUES('Go')`,
+		`Insert{TT TableName T CommaList{ColumnName} !ErrorMissing T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO table_name() VALUES('Go')`,
+		`Insert{TT TableName T !ErrorMissing T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`INSERT INTO table_name(name) VALUES('Go'), 'Rust')`,
+		`Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T} T InsertValuesItem{!ErrorMissing CommaList{E{T}} T}}}}`,
+		`INSERT INTO table_name(name) VALUES`,
+		`Insert{TT TableName T CommaList{ColumnName} T T !ErrorMissing}`,
+		`INSERT INTO table_name(name) DEFAULT`,
+		"Insert{TT TableName T CommaList{ColumnName} T T !ErrorMissing}",
+	)
+
+	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.insert(nil) })
+}
+
+func TestUpsertClause(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ON CONFLICT DO NOTHING ON CONFLICT DO NOTHING`,
+		"UpsertClause{UpsertClauseItem{TT TT} UpsertClauseItem{TT TT}}",
+	)
+
+	runTests(t, cases, (*Parser).upsertClause)
+}
+
+func TestUpsertClauseItem(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`ON CONFLICT DO NOTHING`,
+		"UpsertClauseItem{TT TT}",
+		`ON CONFLICT DO UPDATE SET col='value'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}}}",
+		`ON CONFLICT DO UPDATE SET col_a='value_a', col_b='value_b'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}} T UpsertSetItem{ColName T E{T}}}}",
+		`ON CONFLICT DO UPDATE SET (col_a, col_b)='value_ab', col_c='value_c'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} T T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		`ON CONFLICT DO UPDATE SET col='value' WHERE condition=true`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} Where{T E{Equal{ColRef{ColName} TT}}}}} }",
+		`ON CONFLICT (col) DO NOTHING`,
+		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T TT}",
+		`ON CONFLICT (col_a, col_b) WHERE condition=true DO NOTHING`,
+		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}} T IndexedColumn{E{ColRef{ColName}}}} T
+			Where{T E{Equal{ColRef{ColName} T T}}} TT}`,
+		`ON DO NOTHING`,
+		"UpsertClauseItem{T !ErrorMissing TT}",
+		`ON CONFLICT NOTHING`,
+		"UpsertClauseItem{TT !ErrorMissing T}",
+		`ON CONFLICT DO`,
+		"UpsertClauseItem{TT T !ErrorExpecting}",
+		`ON CONFLICT (col DO NOTHING`,
+		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing TT}",
+		`ON CONFLICT (col_a) WHERE DO NOTHING`,
+		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
+			Where{T !ErrorMissing} TT}`,
+		`ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} !ErrorMissing T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		`ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T !ErrorMissing T T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		`ON CONFLICT DO UPDATE col='value'`,
+		"UpsertClauseItem{TT TT !ErrorMissing CommaList{UpsertSetItem{ColName T E{T}}}}",
+		`ON CONFLICT DO UPDATE SET col='value' WHERE`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} Where{T !ErrorMissing}}} }",
+		`ON CONFLICT DO UPDATE SET WHERE condition=true`,
+		"UpsertClauseItem{TT TT T !ErrorExpecting Where{T E{Equal{ColRef{ColName} TT}}}}} }",
+		`ON CONFLICT DO UPDATE SET col 'value'`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName !ErrorMissing E{T}}}}",
+		`ON CONFLICT DO UPDATE SET col=`,
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T !ErrorMissing}}}",
+	)
+
+	runTests(t, cases, (*Parser).upsertClauseItem)
 }
 
 // runTests executes tests of the function parseFunc.

@@ -50,12 +50,25 @@ func TestParseTree(t *testing.T) {
 }
 
 func TestKindString(t *testing.T) {
-	if KindWith.String() != "With" {
-		t.Errorf("want %s, got %s", "With", KindWith)
+	cases := []struct {
+		k   Kind
+		str string
+	}{
+		{KindAdd, "Add"}, {KindDivide, "Divide"}, {KindFunctionName, "FunctionName"},
+		{KindParenExpression, "ParenExpression"}, {KindTableOrIndexName, "TableOrIndexName"},
+		{KindTypeName, "TypeName"}, {KindUpsertClause, "UpsertClause"}, {KindWindowName, "WindowName"},
+		{KindWith, "With"}, {-1, "-1"},
 	}
 
-	var k Kind = -1
-	if k.String() != "-1" {
-		t.Errorf("want \"-1\", got %q", k.String())
+	for _, c := range cases {
+		if c.k.String() != c.str {
+			t.Errorf("want %s, got %s", c.str, c.k)
+		}
+	}
+}
+
+func TestKindStringsIsSorted(t *testing.T) {
+	if !slices.IsSorted(kindStrings) {
+		t.Error("kindStrings isn't sorted")
 	}
 }
