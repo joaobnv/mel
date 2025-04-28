@@ -48,7 +48,7 @@ func TestTransformers(t *testing.T) {
 	}
 }
 
-func TestTokenKindString(t *testing.T) {
+func TestTokenKind(t *testing.T) {
 	if TokenKindColor.String() != "Color" {
 		fmt.Printf("want %s, got %s", "Color", TokenKindColor.String())
 		t.Fail()
@@ -62,5 +62,8 @@ func TestTokenKindString(t *testing.T) {
 	if k.String() != "-1" {
 		fmt.Printf("want %s, got %s", "-1", k.String())
 		t.Fail()
+	}
+	if TokenKindColor.IsKeyword() {
+		t.Errorf("%s is a keyword", TokenKindColor.String())
 	}
 }

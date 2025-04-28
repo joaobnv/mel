@@ -21,3 +21,21 @@ func TestToken(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestIsKeyword(t *testing.T) {
+	cases := []struct {
+		in   Kind
+		want bool
+	}{
+		{in: kindAbort, want: true}, {in: kindWithout, want: true},
+		{in: kindCascade, want: true}, {in: kindIdentifier, want: false},
+		{in: kind(-1), want: false},
+	}
+
+	for _, c := range cases {
+		got := c.in.IsKeyword()
+		if got != c.want {
+			t.Errorf("%s.IsKeyword() = %t, want %t", c.in, got, c.want)
+		}
+	}
+}

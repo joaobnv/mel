@@ -87,4 +87,7 @@ func TestTokenKind(t *testing.T) {
 		fmt.Printf("k.String = %q, want \"2\"\n", k.String())
 		t.Fail()
 	}
+	if TokenKindAnsiCode.IsKeyword() {
+		t.Errorf("%s is a keyword", TokenKindAnsiCode.String())
+	}
 }

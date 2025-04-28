@@ -8,6 +8,8 @@ import (
 // Kind is the type of a token.
 type Kind interface {
 	fmt.Stringer
+	// IsKeyword reports whether this kind is of a keyword.
+	IsKeyword() bool
 }
 
 // kind is the type of a token needed by this package.
@@ -165,7 +167,7 @@ const (
 	kindWindow
 	kindWith
 	kindWithout
-	// kind =  end of keywords
+	// end of keywords
 	kindIdentifier
 	kindString
 	kindBlob
@@ -216,6 +218,11 @@ func (k kind) String() string {
 		return strconv.Itoa(int(k))
 	}
 	return kindStrings[k]
+}
+
+// IsKeyword reports whether this kind is of a keyword.
+func (k kind) IsKeyword() bool {
+	return k >= kindAbort && k <= kindWithout
 }
 
 // kindStrings contains the string representation of the kinds. Note that the value of a kind is the index of your string

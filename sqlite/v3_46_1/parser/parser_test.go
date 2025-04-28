@@ -105,6 +105,7 @@ func TestSQLStatement(t *testing.T) {
 		`INSERT INTO table_name(name) VALUES('Go')`,
 		`SQLStatement{Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
+		`PRAGMA pragma_name`, "SQLStatement{Pragma{T PragmaName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1913,6 +1914,28 @@ func TestUpsertClauseItem(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).upsertClauseItem)
+}
+
+func TestPragma(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`PRAGMA pragma_name`, "Pragma{T PragmaName}",
+		`PRAGMA temp.pragma_name`, "Pragma{T SchemaName T PragmaName}",
+		`PRAGMA pragma_name=10`, "Pragma{T PragmaName T PragmaValue{T}}",
+		`PRAGMA pragma_name=-10`, "Pragma{T PragmaName T PragmaValue{TT}}",
+		`PRAGMA pragma_name=+SELECT`, "Pragma{T PragmaName T PragmaValue{TT}}",
+		`PRAGMA pragma_name='yes'`, "Pragma{T PragmaName T PragmaValue{T}}",
+		`PRAGMA pragma_name('yes')`, "Pragma{T PragmaName T PragmaValue{T} T}",
+		`PRAGMA .index_name`, "Pragma{T !ErrorMissing T PragmaName}",
+		`PRAGMA schema_name.`, "Pragma{T SchemaName T !ErrorMissing}",
+		`PRAGMA schema_name pragma_name`, "Pragma{T SchemaName !ErrorMissing PragmaName}",
+		`PRAGMA pragma_name=`, "Pragma{T PragmaName T !ErrorMissing}",
+		`PRAGMA pragma_name=+`, "Pragma{T PragmaName T PragmaValue{T !ErrorExpecting}}",
+		`PRAGMA pragma_name()`, "Pragma{T PragmaName T !ErrorMissing T}",
+		`PRAGMA pragma_name(10`, "Pragma{T PragmaName T PragmaValue{T} !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).pragma)
 }
 
 // runTests executes tests of the function parseFunc.

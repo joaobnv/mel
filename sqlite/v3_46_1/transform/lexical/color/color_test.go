@@ -73,7 +73,7 @@ func TestMarshal(t *testing.T) {
 	}
 }
 
-func TestTokenKindString(t *testing.T) {
+func TestTokenKind(t *testing.T) {
 	if TokenKindBackgroundColor.String() != "BackgroundColor" {
 		fmt.Printf("want %s, got %s", "BackgroundColor", TokenKindBackgroundColor)
 		t.Fail()
@@ -86,5 +86,8 @@ func TestTokenKindString(t *testing.T) {
 	if k.String() != "-1" {
 		fmt.Printf("want %s, got %s", "-1", k.String())
 		t.Fail()
+	}
+	if TokenKindBackgroundColor.IsKeyword() {
+		t.Errorf("%s is a keyword", TokenKindBackgroundColor.String())
 	}
 }

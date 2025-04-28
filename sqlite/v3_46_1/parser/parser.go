@@ -1,6 +1,8 @@
 // This package deals with the parsing of the SQL.
 package parser
 
+// TODO: implement the quote rule exceptions: lang_keywords.html.
+
 import (
 	"errors"
 	"slices"
@@ -133,6 +135,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 			father.AddChild(with)
 			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
 		}
+	case token.KindPragma:
+		father.AddChild(p.pragma())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -4172,6 +4176,86 @@ func (p *Parser) upsertSetItem() parsetree.NonTerminal {
 		nt.AddChild(p.expression())
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression`)))
+	}
+
+	return nt
+}
+
+// pragma parses a pragma statement.
+func (p *Parser) pragma() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindPragma)
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	} else if p.tok[0].Kind == token.KindDot {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma name`)))
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindPragmaName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma name`)))
+	}
+
+	if p.tok[0].Kind == token.KindEqual {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus || p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
+			nt.AddChild(p.pragmaValue())
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma value`)))
+		}
+	} else if p.tok[0].Kind == token.KindLeftParen {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus || p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
+			nt.AddChild(p.pragmaValue())
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma value`)))
+		}
+
+		if p.tok[0].Kind == token.KindRightParen {
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
+		}
+	}
+
+	return nt
+}
+
+// pragmaValue parses a pragma value.
+func (p *Parser) pragmaValue() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindPragmaValue)
+
+	if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting number, keyword, identifier, or string`)))
 	}
 
 	return nt

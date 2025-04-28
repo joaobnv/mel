@@ -125,6 +125,11 @@ func (k *tokenKind) String() string {
 	return tokenKindStrings[*k]
 }
 
+// IsKeyword reports whether this kind is of a keyword.
+func (k *tokenKind) IsKeyword() bool {
+	return false
+}
+
 // tokenKindStrings contains the string representation of the token kinds specific to this package.
 // Note that the value of a tokenKind is the index of your string representation.
 var tokenKindStrings = []string{
