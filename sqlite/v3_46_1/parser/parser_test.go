@@ -107,6 +107,7 @@ func TestSQLStatement(t *testing.T) {
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`PRAGMA pragma_name`, "SQLStatement{Pragma{T PragmaName} T}",
 		`REINDEX`, "SQLStatement{Reindex{T} T}",
+		`RELEASE savepoint_name`, "SQLStatement{Release{T SavepointName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1950,6 +1951,18 @@ func TestReindex(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).reindex)
+}
+
+func TestRelease(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`RELEASE savepoint_name`, "Release{T SavepointName}",
+		`RELEASE SAVEPOINT savepoint_name`, "Release{TT SavepointName}",
+		`RELEASE`, "Release{T !ErrorMissing}",
+		`RELEASE SAVEPOINT`, "Release{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).release)
 }
 
 // runTests executes tests of the function parseFunc.

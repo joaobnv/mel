@@ -139,6 +139,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.pragma())
 	case token.KindReindex:
 		father.AddChild(p.reindex())
+	case token.KindRelease:
+		father.AddChild(p.release())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -4297,6 +4299,27 @@ func (p *Parser) reindex() parsetree.NonTerminal {
 		p.advance()
 	} else if hasSchema {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name, or index name`)))
+	}
+
+	return nt
+}
+
+// release parses a release statement.
+func (p *Parser) release() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindRelease)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindSavepoint {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSavepointName, p.tok[0]))
+		p.advance()
+	} else {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
 	}
 
 	return nt
