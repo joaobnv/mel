@@ -137,6 +137,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		}
 	case token.KindPragma:
 		father.AddChild(p.pragma())
+	case token.KindReindex:
+		father.AddChild(p.reindex())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -4200,7 +4202,7 @@ func (p *Parser) pragma() parsetree.NonTerminal {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
 		}
 	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma name`)))
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 	}
@@ -4256,6 +4258,45 @@ func (p *Parser) pragmaValue() parsetree.NonTerminal {
 		p.advance()
 	} else {
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting number, keyword, identifier, or string`)))
+	}
+
+	return nt
+}
+
+// reindex parses a reindex statement.
+func (p *Parser) reindex() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindReindex)
+
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	var hasSchema bool
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		if p.tok[1].Kind == token.KindDot {
+			hasSchema = true
+
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+		} else if p.tok[1].Kind == token.KindIdentifier {
+			hasSchema = true
+
+			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+			p.advance()
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
+		}
+	}
+
+	if p.tok[0].Kind == token.KindIdentifier {
+		k := parsetree.KindCollationTableOrIndexName
+		if hasSchema {
+			k = parsetree.KindTableOrIndexName
+		}
+		nt.AddChild(parsetree.NewTerminal(k, p.tok[0]))
+		p.advance()
+	} else if hasSchema {
+		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name, or index name`)))
 	}
 
 	return nt

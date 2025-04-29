@@ -106,6 +106,7 @@ func TestSQLStatement(t *testing.T) {
 		`SQLStatement{Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`PRAGMA pragma_name`, "SQLStatement{Pragma{T PragmaName} T}",
+		`REINDEX`, "SQLStatement{Reindex{T} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1936,6 +1937,19 @@ func TestPragma(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).pragma)
+}
+
+func TestReindex(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`REINDEX`, "Reindex{T}",
+		`REINDEX table_name`, "Reindex{T CollationTableOrIndexName}",
+		`REINDEX temp.table_name`, "Reindex{T SchemaName T TableOrIndexName}",
+		`REINDEX schema_name.`, "Reindex{T SchemaName T !ErrorMissing}",
+		`REINDEX schema_name table_name`, "Reindex{T SchemaName !ErrorMissing TableOrIndexName}",
+	)
+
+	runTests(t, cases, (*Parser).reindex)
 }
 
 // runTests executes tests of the function parseFunc.

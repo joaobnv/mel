@@ -30,6 +30,7 @@ const (
 	KindCollate
 	KindCollateColumnConstraint
 	KindCollationName
+	KindCollationTableOrIndexName
 	KindColumnAlias
 	KindColumnConstraint
 	KindColumnDefinition
@@ -127,6 +128,7 @@ const (
 	KindQualifiedTableName
 	KindRaise
 	KindRegexp
+	KindReindex
 	KindRenameColumn
 	KindRenameTo
 	KindReturningClause
@@ -175,7 +177,7 @@ func (k Kind) String() string {
 // representation.
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
-	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "ColumnAlias", "ColumnConstraint", "ColumnDefinition",
+	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "CollationTableOrIndexName", "ColumnAlias", "ColumnConstraint", "ColumnDefinition",
 	"ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex",
 	"CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable",
 	"DropTrigger", "DropView", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression",
@@ -184,7 +186,7 @@ var kindStrings = []string{
 	"InsertValuesList", "Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "ModuleArgument",
 	"ModuleName", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Notnull",
 	"Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "Pragma", "PragmaName", "PragmaValue", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint",
-	"QualifiedTableName", "Raise", "Regexp", "RenameColumn", "RenameTo", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement", "SavepointName",
+	"QualifiedTableName", "Raise", "Regexp", "Reindex", "RenameColumn", "RenameTo", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement", "SavepointName",
 	"SchemaIndexOrTableName", "SchemaName", "Select", "Skipped", "Subtract", "TableAlias", "TableConstraint", "TableFunctionName", "TableName",
 	"TableOption", "TableOrIndexName", "Token", "TriggerBody", "TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpsertClause",
 	"UpsertClauseItem", "UpsertSetItem", "ViewName", "When", "Where", "WindowName", "With",
