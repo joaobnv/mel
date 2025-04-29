@@ -108,6 +108,7 @@ func TestSQLStatement(t *testing.T) {
 		`PRAGMA pragma_name`, "SQLStatement{Pragma{T PragmaName} T}",
 		`REINDEX`, "SQLStatement{Reindex{T} T}",
 		`RELEASE savepoint_name`, "SQLStatement{Release{T SavepointName} T}",
+		`SAVEPOINT savepoint_name`, "SQLStatement{Savepoint{T SavepointName} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -1963,6 +1964,16 @@ func TestRelease(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).release)
+}
+
+func TestSavepoint(t *testing.T) {
+	t.Parallel()
+	cases := testCases(
+		`SAVEPOINT savepoint_name`, "Savepoint{T SavepointName}",
+		`SAVEPOINT`, "Savepoint{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).savepoint)
 }
 
 // runTests executes tests of the function parseFunc.
