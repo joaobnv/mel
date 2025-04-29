@@ -105,6 +105,9 @@ func TestSQLStatement(t *testing.T) {
 		`INSERT INTO table_name(name) VALUES('Go')`,
 		`SQLStatement{Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
+		`REPLACE INTO table_name(name) VALUES('Go')`,
+		`SQLStatement{Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`PRAGMA pragma_name`, "SQLStatement{Pragma{T PragmaName} T}",
 		`REINDEX`, "SQLStatement{Reindex{T} T}",
 		`RELEASE savepoint_name`, "SQLStatement{Release{T SavepointName} T}",
@@ -1800,6 +1803,9 @@ func TestInsert(t *testing.T) {
 	t.Parallel()
 	cases := testCases(
 		`INSERT INTO table_name(name) VALUES('Go')`,
+		`Insert{TT TableName T CommaList{ColumnName} T T
+			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
+		`REPLACE INTO table_name(name) VALUES('Go')`,
 		`Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
 		`INSERT OR ABORT INTO temp.table_name(name) VALUES('Go')`,

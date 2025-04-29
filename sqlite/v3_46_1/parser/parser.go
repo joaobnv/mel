@@ -3878,20 +3878,25 @@ func (p *Parser) insert(withClause parsetree.NonTerminal) parsetree.NonTerminal 
 		nt.AddChild(withClause)
 	}
 
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
-
-	if p.tok[0].Kind == token.KindOr {
+	if p.tok[0].Kind == token.KindInsert {
 		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 		p.advance()
 
-		switch p.tok[0].Kind {
-		case token.KindAbort, token.KindFail, token.KindIgnore, token.KindReplace, token.KindRollback:
+		if p.tok[0].Kind == token.KindOr {
 			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
-		case token.KindInto:
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "ABORT", "FAIL", "IGNORE", "REPLACE", or "ROLLBACK"`)))
+
+			switch p.tok[0].Kind {
+			case token.KindAbort, token.KindFail, token.KindIgnore, token.KindReplace, token.KindRollback:
+				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+				p.advance()
+			case token.KindInto:
+				nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "ABORT", "FAIL", "IGNORE", "REPLACE", or "ROLLBACK"`)))
+			}
 		}
+	} else {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
 	}
 
 	if p.tok[0].Kind == token.KindInto {
