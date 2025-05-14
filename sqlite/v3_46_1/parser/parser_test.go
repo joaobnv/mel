@@ -115,6 +115,13 @@ func TestSQLStatement(t *testing.T) {
 		`SQLStatement{SimpleSelect{
 				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				SelectCore{T CommaList{ResultColumn{E{T}}}} } T}`,
+		`UPDATE table_name SET a=10;`,
+		`SQLStatement{Update{
+				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
+		`WITH cte AS (SELECT 10) UPDATE table_name SET a=10;`,
+		`SQLStatement{Update{
+				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -742,8 +749,9 @@ func TestCreateTrigger(t *testing.T) {
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}} } TT}}`,
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
 		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN a > 10 BEGIN UPDATE 10; END`,
-		"CreateTrigger{TT TriggerName TTTT TableName T E{GreaterThan{ColRef{ColName} T T}} TriggerBody{T Update {T E{T}} TT}}",
+		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN a > 10 BEGIN UPDATE table_name SET a=10; END`,
+		`CreateTrigger{TT TriggerName TTTT TableName T E{GreaterThan{ColRef{ColName} T T}}
+				TriggerBody{T Update {T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColumnName T E{T}}}} TT}}`,
 		`CREATE TRIGGER trigger_name UPDATE OF a, b ON table_name BEGIN SELECT 10; END`,
 		"CreateTrigger{TT TriggerName TT CommaList{ColName T ColName} T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE table_name BEGIN SELECT 10; END`,
@@ -1822,13 +1830,13 @@ func TestUpsertClauseItem(t *testing.T) {
 		`ON CONFLICT DO NOTHING`,
 		"UpsertClauseItem{TT TT}",
 		`ON CONFLICT DO UPDATE SET col='value'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}}}",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T E{T}}}}",
 		`ON CONFLICT DO UPDATE SET col_a='value_a', col_b='value_b'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}} T UpsertSetItem{ColName T E{T}}}}",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T E{T}} T UpdateSetItem{ColName T E{T}}}}",
 		`ON CONFLICT DO UPDATE SET (col_a, col_b)='value_ab', col_c='value_c'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} T T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{T CommaList{ColName T ColName} T T E{T}} T UpdateSetItem{ColName T E{T}}} }",
 		`ON CONFLICT DO UPDATE SET col='value' WHERE condition=true`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T E{T}}} WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
 		`ON CONFLICT (col) DO NOTHING`,
 		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T TT}",
 		`ON CONFLICT (col_a, col_b) WHERE condition=true DO NOTHING`,
@@ -1846,19 +1854,19 @@ func TestUpsertClauseItem(t *testing.T) {
 		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
 			WhereClause{T !ErrorMissing} TT}`,
 		`ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} !ErrorMissing T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{T CommaList{ColName T ColName} !ErrorMissing T E{T}} T UpdateSetItem{ColName T E{T}}} }",
 		`ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T !ErrorMissing T T E{T}} T UpsertSetItem{ColName T E{T}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{T !ErrorMissing T T E{T}} T UpdateSetItem{ColName T E{T}}} }",
 		`ON CONFLICT DO UPDATE col='value'`,
-		"UpsertClauseItem{TT TT !ErrorMissing CommaList{UpsertSetItem{ColName T E{T}}}}",
+		"UpsertClauseItem{TT TT !ErrorMissing CommaList{UpdateSetItem{ColName T E{T}}}}",
 		`ON CONFLICT DO UPDATE SET col='value' WHERE`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} WhereClause{T !ErrorMissing}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T E{T}}} WhereClause{T !ErrorMissing}}} }",
 		`ON CONFLICT DO UPDATE SET WHERE condition=true`,
 		"UpsertClauseItem{TT TT T !ErrorExpecting WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
 		`ON CONFLICT DO UPDATE SET col 'value'`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName !ErrorMissing E{T}}}}",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName !ErrorMissing E{T}}}}",
 		`ON CONFLICT DO UPDATE SET col=`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T !ErrorMissing}}}",
+		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T !ErrorMissing}}}",
 	)
 
 	runTests(t, cases, (*Parser).upsertClauseItem)
@@ -2175,6 +2183,42 @@ func TestLimitClause(t *testing.T) {
 	runTests(t, cases, (*Parser).limitClause)
 }
 
+func TestUpdate(t *testing.T) {
+	cases := testCases(
+		`UPDATE table_name SET col_name=10`, "Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE table_name SET a=10, b=20`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}} T UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE OR ABORT table_name SET col_name=10`, "Update{T TT QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE table_name SET (a, b)=(10, 20)`,
+		`Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{T CommaList{ColName T ColName} TT
+				E{ParenExpression{T CommaList{E{T} T E{T}} T}}}}}`,
+		`UPDATE table_name SET col_name=10 FROM table_name_2`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} FromClause{T JoinClause{TableOrSubquery{TableName}}}}",
+		`UPDATE table_name SET col_name=10 WHERE TRUE`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} WhereClause{T E{T}}}",
+		`UPDATE table_name SET col_name=10 RETURNING *`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} ReturningClause{T CommaList{ReturningItem{T}}}}",
+		`UPDATE table_name SET col_name=10 ORDER BY 20`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} OrderByClause{TT CommaList{OrderingTerm{E{T}}}}}",
+		`UPDATE table_name SET col_name=10 LIMIT 10`,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} LimitClause{T E{T}}}",
+		`UPDATE table_name SET col_name=10 RETURNING *, `,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} ReturningClause{T CommaList{ReturningItem{T} T !ErrorMissing}}}",
+		`UPDATE OR table_name SET col_name=10`,
+		"Update{T T !ErrorExpecting QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE schema_name.table_name col_name=10`,
+		"Update{T QualifiedTableName{SchemaName T TableName} !ErrorMissing CommaList{UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE SET col_name=10`,
+		"Update{T !ErrorMissing T CommaList{UpdateSetItem{ColName T E{T}}}}",
+		`UPDATE table_name SET `,
+		"Update{T QualifiedTableName{TableName} T !ErrorExpecting}",
+		`UPDATE table_name SET a=10, `,
+		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}} T !ErrorMissing}}",
+	)
+
+	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })
+}
+
 // runTests executes tests of the function parseFunc.
 func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFunc func(*Parser) T) {
 	for i, c := range cases {
@@ -2411,7 +2455,7 @@ func (c *comparator) compareErrors(parsed, expected parsetree.Error) bool {
 	)
 
 	if parsed.Kind() != expected.Kind() {
-		fmt.Fprintf(c.tw, "%s ≠ %s\n", parsed.Kind(), expected.Kind())
+		fmt.Fprintf(c.tw, "%s ≠ %s <%s>\n", parsed.Kind(), expected.Kind(), parsed.Error())
 		return false
 	}
 

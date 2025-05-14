@@ -169,9 +169,9 @@ const (
 	KindUniqueColumnConstraint
 	KindUniqueTableConstraint
 	KindUpdate
+	KindUpdateSetItem
 	KindUpsertClause
 	KindUpsertClauseItem
-	KindUpsertSetItem
 	KindValuesClause
 	KindValuesItem
 	KindViewName
@@ -211,7 +211,7 @@ var kindStrings = []string{
 	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement",
 	"Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "Subtract", "TableAlias",
 	"TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "TableOrSubquery", "Token", "TriggerBody", "TriggerName",
-	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpsertClause", "UpsertClauseItem", "UpsertSetItem", "ValuesClause",
+	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpdateSetItem", "UpsertClause", "UpsertClauseItem", "ValuesClause",
 	"ValuesItem", "ViewName", "When", "WhereClause", "WindowClause", "WindowClauseItem", "WindowDefinition", "WindowName", "WithClause",
 }
 
