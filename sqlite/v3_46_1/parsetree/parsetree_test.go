@@ -57,7 +57,7 @@ func TestKindString(t *testing.T) {
 		{KindAdd, "Add"}, {KindDivide, "Divide"}, {KindFunctionName, "FunctionName"},
 		{KindParenExpression, "ParenExpression"}, {KindTableOrIndexName, "TableOrIndexName"},
 		{KindTypeName, "TypeName"}, {KindUpsertClause, "UpsertClause"}, {KindWindowName, "WindowName"},
-		{KindWith, "With"}, {-1, "-1"},
+		{KindWithClause, "WithClause"}, {-1, "-1"},
 	}
 
 	for _, c := range cases {

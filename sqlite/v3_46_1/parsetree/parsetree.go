@@ -39,6 +39,8 @@ const (
 	KindCommaList
 	KindCommit
 	KindCommonTableExpression
+	KindCompoundOperator
+	KindCompoundSelect
 	KindConcatenate
 	KindConflictClause
 	KindConstraintName
@@ -74,6 +76,7 @@ const (
 	KindForeignKeyTableConstraint
 	KindFrameSpec
 	KindFrameSpecBetween
+	KindFromClause
 	KindFunctionArguments
 	KindFunctionCall
 	KindFunctionName
@@ -81,6 +84,8 @@ const (
 	KindGlob
 	KindGreaterThan
 	KindGreaterThanOrEqual
+	KindGroupByClause
+	KindHavingClause
 	KindIn
 	KindIndexName
 	KindIndexedColumn
@@ -92,10 +97,14 @@ const (
 	KindIsNot
 	KindIsNotDistinctFrom
 	KindIsnull
+	KindJoinClause
+	KindJoinConstraint
+	KindJoinOperator
 	KindLeftShift
 	KindLessThan
 	KindLessThanOrEqual
 	KindLike
+	KindLimitClause
 	KindMatch
 	KindMod
 	KindModuleArgument
@@ -114,7 +123,7 @@ const (
 	KindNotRegexp
 	KindNotnull
 	KindOr
-	KindOrderBy
+	KindOrderByClause
 	KindOrderingTerm
 	KindOverClause
 	KindParenExpression
@@ -132,6 +141,7 @@ const (
 	KindRelease
 	KindRenameColumn
 	KindRenameTo
+	KindResultColumn
 	KindReturningClause
 	KindReturningItem
 	KindRightShift
@@ -141,7 +151,8 @@ const (
 	KindSavepointName
 	KindSchemaIndexOrTableName
 	KindSchemaName
-	KindSelect
+	KindSelectCore
+	KindSimpleSelect
 	KindSkipped
 	KindSubtract
 	KindTableAlias
@@ -150,6 +161,7 @@ const (
 	KindTableName
 	KindTableOption
 	KindTableOrIndexName
+	KindTableOrSubquery
 	KindToken
 	KindTriggerBody
 	KindTriggerName
@@ -160,11 +172,16 @@ const (
 	KindUpsertClause
 	KindUpsertClauseItem
 	KindUpsertSetItem
+	KindValuesClause
+	KindValuesItem
 	KindViewName
 	KindWhen
-	KindWhere
+	KindWhereClause
+	KindWindowClause
+	KindWindowClauseItem
+	KindWindowDefinition
 	KindWindowName
-	KindWith
+	KindWithClause
 )
 
 // String returns a string representation of k.
@@ -180,20 +197,22 @@ func (k Kind) String() string {
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
 	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "CollationTableOrIndexName", "ColumnAlias",
-	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "Concatenate", "ConflictClause",
-	"ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable", "DefaultColumnConstraint", "Delete", "Detach",
-	"Divide", "DropColumn", "DropIndex", "DropTable", "DropTrigger", "DropView", "Else", "Equal", "ErrorExpecting", "ErrorMessage", "ErrorMissing",
-	"ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2", "FilterClause", "ForeignKeyClause",
-	"ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FunctionArguments", "FunctionCall", "FunctionName",
-	"GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "In", "IndexName", "IndexedColumn", "Insert", "InsertValuesItem", "InsertValuesList",
-	"Is", "IsDistinctFrom", "IsNot", "IsNotDistinctFrom", "Isnull", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "Match", "Mod", "ModuleArgument",
-	"ModuleName", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch", "NotNull", "NotNullColumnConstraint",
-	"NotRegexp", "Notnull", "Or", "OrderBy", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy", "Pragma", "PragmaName", "PragmaValue", "PrefixPlus",
-	"PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName", "Raise", "Regexp", "Reindex", "Release", "RenameColumn", "RenameTo",
-	"ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement", "Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "Select",
-	"Skipped", "Subtract", "TableAlias", "TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "Token", "TriggerBody",
-	"TriggerName", "TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpsertClause", "UpsertClauseItem", "UpsertSetItem", "ViewName",
-	"When", "Where", "WindowName", "With",
+	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "CompoundOperator",
+	"CompoundSelect", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable",
+	"DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable", "DropTrigger", "DropView", "Else", "Equal",
+	"ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2",
+	"FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FromClause",
+	"FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "GroupByClause",
+	"HavingClause", "In", "IndexName", "IndexedColumn", "Insert", "InsertValuesItem", "InsertValuesList", "Is", "IsDistinctFrom", "IsNot",
+	"IsNotDistinctFrom", "Isnull", "JoinClause", "JoinConstraint", "JoinOperator", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "LimitClause",
+	"Match", "Mod", "ModuleArgument", "ModuleName", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch",
+	"NotNull", "NotNullColumnConstraint", "NotRegexp", "Notnull", "Or", "OrderByClause", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy",
+	"Pragma", "PragmaName", "PragmaValue", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName", "Raise",
+	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement",
+	"Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "Subtract", "TableAlias",
+	"TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "TableOrSubquery", "Token", "TriggerBody", "TriggerName",
+	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpsertClause", "UpsertClauseItem", "UpsertSetItem", "ValuesClause",
+	"ValuesItem", "ViewName", "When", "WhereClause", "WindowClause", "WindowClauseItem", "WindowDefinition", "WindowName", "WithClause",
 }
 
 // Construction is a construction in SQL grammar.

@@ -38,7 +38,6 @@ func testCases(p ...string) (cases []testCase) {
 }
 
 func TestSQLStatement(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`EXPLAIN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
 		`SQLStatement {Explain {T AlterTable {TT TableName AddColumn {TT ColDef {ColName
@@ -67,7 +66,7 @@ func TestSQLStatement(t *testing.T) {
 		`CREATE TABLE table_name (column_a);`,
 		"SQLStatement {CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
 		`SELECT 10;`,
-		"SQLStatement {Select {T E{T}} T}",
+		"SQLStatement {SimpleSelect {SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`CREATE TABLE table_name (column_a);`,
 		"SQLStatement{CreateTable {TT TableName T CommaList{ColDef{ColName}} T} T}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
@@ -78,15 +77,15 @@ func TestSQLStatement(t *testing.T) {
 		`SQLStatement{CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}} } TT}} T}`,
 		`CREATE VIEW view_name AS SELECT 10;`,
-		"SQLStatement{CreateView{TT ViewName T Select{T E{T}}} T}",
+		"SQLStatement{CreateView{TT ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}} T}",
 		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10;`,
-		"SQLStatement{CreateView{TTT TTT ViewName T Select{T E{T}}} T}",
+		"SQLStatement{CreateView{TTT TTT ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}} T}",
 		`CREATE VIRTUAL TABLE table_name USING module_name`,
 		"SQLStatement{CreateVirtualTable{TTT TableName T ModuleName} T}",
 		`DELETE FROM tableName`,
 		"SQLStatement{Delete{TT QualifiedTableName{TableName}} T}",
 		`WITH cte AS (SELECT 10) DELETE FROM tableName`,
-		`SQLStatement{Delete{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+		`SQLStatement{Delete{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			TT QualifiedTableName{TableName}} T}`,
 		`DETACH temp`,
 		"SQLStatement{Detach{T SchemaName} T}",
@@ -99,7 +98,7 @@ func TestSQLStatement(t *testing.T) {
 		`DROP VIEW view_name`,
 		"SQLStatement{DropView{TT ViewName} T}",
 		`WITH cte AS (SELECT 10) INSERT INTO table_name(name) VALUES('Go')`,
-		`SQLStatement{Insert{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+		`SQLStatement{Insert{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`INSERT INTO table_name(name) VALUES('Go')`,
@@ -112,19 +111,22 @@ func TestSQLStatement(t *testing.T) {
 		`REINDEX`, "SQLStatement{Reindex{T} T}",
 		`RELEASE savepoint_name`, "SQLStatement{Release{T SavepointName} T}",
 		`SAVEPOINT savepoint_name`, "SQLStatement{Savepoint{T SavepointName} T}",
+		`WITH cte AS (SELECT 10) SELECT 10;`,
+		`SQLStatement{SimpleSelect{
+				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+				SelectCore{T CommaList{ResultColumn{E{T}}}} } T}`,
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
-		"SQLStatement {Select {T E{T}} Skipped{T} T}",
+		"SQLStatement {SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} Skipped{T} T}",
 		`WITH cte AS (SELECT 10) `,
-		`SQLStatement{With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T}}}
+		`SQLStatement{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			!ErrorExpecting T}}`,
 	)
 
 	for i, c := range cases {
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
@@ -141,7 +143,6 @@ func TestSQLStatement(t *testing.T) {
 }
 
 func TestAlterTable(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ALTER TABLE table_a RENAME TO table_b`,
 		"AlterTable {TT TableName RenameTo {TT TableName}}",
@@ -191,7 +192,6 @@ func TestAlterTable(t *testing.T) {
 }
 
 func TestColumnDefinition(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a INTEGER PRIMARY KEY`,
 		"ColDef{ColName TypeName{T} ColConstr{PrimaryKeyColumnConstraint{TT}}}",
@@ -201,7 +201,6 @@ func TestColumnDefinition(t *testing.T) {
 }
 
 func TestTypeName(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`INTEGER`, "TypeName{T}",
 		`INTEGER(10)`, "TypeName{TTTT}",
@@ -216,7 +215,6 @@ func TestTypeName(t *testing.T) {
 }
 
 func TestColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CONSTRAINT constr PRIMARY KEY`,
 		"ColConstr{T ConstraintName PrimaryKeyColumnConstraint{TT}}",
@@ -244,7 +242,6 @@ func TestColumnConstraint(t *testing.T) {
 }
 
 func TestPrimaryKeyColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`PRIMARY KEY`, "PrimaryKeyColumnConstraint{TT}",
 		`PRIMARY KEY ASC ON CONFLICT ROLLBACK`,
@@ -257,7 +254,6 @@ func TestPrimaryKeyColumnConstraint(t *testing.T) {
 }
 
 func TestNotNullColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`NOT NULL`, "NotNullColumnConstraint{TT}",
 		`NOT NULL ON CONFLICT ROLLBACK`,
@@ -269,7 +265,6 @@ func TestNotNullColumnConstraint(t *testing.T) {
 }
 
 func TestUniqueColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`UNIQUE`, "UniqueColumnConstraint{T}",
 		`UNIQUE ON CONFLICT ROLLBACK`,
@@ -280,7 +275,6 @@ func TestUniqueColumnConstraint(t *testing.T) {
 }
 
 func TestCheckColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CHECK(a > 10)`,
 		"CheckColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}",
@@ -296,7 +290,6 @@ func TestCheckColumnConstraint(t *testing.T) {
 }
 
 func TestDefaultColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DEFAULT(a > 10)`,
 		"DefaultColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}",
@@ -318,7 +311,6 @@ func TestDefaultColumnConstraint(t *testing.T) {
 }
 
 func TestCollateColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`COLLATE c`,
 		"CollateColumnConstraint{T CollationName}",
@@ -330,7 +322,6 @@ func TestCollateColumnConstraint(t *testing.T) {
 }
 
 func TestGeneratedColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`GENERATED ALWAYS AS (10)`,
 		"GeneratedColumnConstraint{TTTT E{T} T}",
@@ -354,7 +345,6 @@ func TestGeneratedColumnConstraint(t *testing.T) {
 }
 
 func TestForeignKeyColumnConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`REFERENCES table_name`,
 		"ForeignKeyColumnConstraint{ForeignKeyClause{T TableName}}",
@@ -364,7 +354,6 @@ func TestForeignKeyColumnConstraint(t *testing.T) {
 }
 
 func TestForeignKeyClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`REFERENCES table_name`,
 		"ForeignKeyClause{T TableName}",
@@ -412,7 +401,6 @@ func TestForeignKeyClause(t *testing.T) {
 }
 
 func TestConflictClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ON CONFLICT ROLLBACK`, "ConflictClause{TTT}",
 		`ON CONFLICT ABORT`, "ConflictClause{TTT}",
@@ -427,7 +415,6 @@ func TestConflictClause(t *testing.T) {
 }
 
 func TestAnalyze(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ANALYZE schema_name`,
 		"Analyze {T SchemaIndexOrTableName}",
@@ -447,7 +434,6 @@ func TestAnalyze(t *testing.T) {
 }
 
 func TestAttach(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ATTACH DATABASE ':memory' AS schema_name`, "Attach {TT E{T} T SchemaName}",
 		`ATTACH '' AS schema_name`, "Attach {T E{T} T SchemaName}",
@@ -460,7 +446,6 @@ func TestAttach(t *testing.T) {
 }
 
 func TestBegin(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`BEGIN`, "Begin {T}",
 		`BEGIN DEFERRED TRANSACTION`, "Begin {TTT}",
@@ -472,7 +457,6 @@ func TestBegin(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`COMMIT`, "Commit {T}",
 		`COMMIT TRANSACTION`, "Commit {TT}",
@@ -484,7 +468,6 @@ func TestCommit(t *testing.T) {
 }
 
 func TestRollback(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ROLLBACK`,
 		"Rollback {T}",
@@ -504,7 +487,6 @@ func TestRollback(t *testing.T) {
 }
 
 func TestCreateIndex(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CREATE INDEX index_name ON table_name(column_name)`,
 		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
@@ -544,7 +526,6 @@ func TestCreateIndex(t *testing.T) {
 }
 
 func TestIndexedColumn(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`column_name`,
 		"IndexedColumn{ColName}",
@@ -562,7 +543,6 @@ func TestIndexedColumn(t *testing.T) {
 }
 
 func TestIndexedColumnExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`column_name`,
 		"IndexedColumn{E{ColRef{ColName}}}",
@@ -580,14 +560,13 @@ func TestIndexedColumnExpression(t *testing.T) {
 }
 
 func TestCreateTable(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CREATE TABLE table_name (column_a);`,
 		"CreateTable {TT TableName T CommaList{ColDef{ColName}} T}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
 		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
 		`CREATE TEMPORARY TABLE table_name AS SELECT 'value';`,
-		"CreateTable {TTT TableName T Select{T E{T}}}",
+		"CreateTable {TTT TableName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
 		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
 		`CREATE TABLE table_a (column_b INTEGER INTEGER);`,
@@ -623,7 +602,6 @@ func TestCreateTable(t *testing.T) {
 }
 
 func TestColumnDefinitionList(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`column_a`, "CommaList{ColDef{ColName}}",
 		`column_a, column_b`, "CommaList{ColDef{ColName} T ColDef{ColName}}",
@@ -635,7 +613,6 @@ func TestColumnDefinitionList(t *testing.T) {
 }
 
 func TestTableConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CONSTRAINT pk PRIMARY KEY (column_name)`,
 		"TableConstraint{T ConstraintName PrimaryKeyTableConstraint{TTT CommaList{IndexedColumn{ColName}} T}}",
@@ -656,7 +633,6 @@ func TestTableConstraint(t *testing.T) {
 }
 
 func TestPrimaryKeyTableConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`PRIMARY KEY (column_name) ON CONFLICT ROLLBACK`,
 		"PrimaryKeyTableConstraint{TT T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
@@ -672,7 +648,6 @@ func TestPrimaryKeyTableConstraint(t *testing.T) {
 }
 
 func TestUniqueTableConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`UNIQUE (column_name) ON CONFLICT ROLLBACK`,
 		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
@@ -686,7 +661,6 @@ func TestUniqueTableConstraint(t *testing.T) {
 }
 
 func TestCheckTableConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CHECK (TRUE)`, "CheckTableConstraint{T T E{T} T}",
 		`CHECK TRUE)`, "CheckTableConstraint{T !ErrorMissing E{T} T}",
@@ -698,7 +672,6 @@ func TestCheckTableConstraint(t *testing.T) {
 }
 
 func TestForeignKeyTableConstraint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`FOREIGN KEY (column_name) REFERENCES table_name`,
 		"ForeignKeyTableConstraint{TT T CommaList{ColName} T ForeignKeyClause{T TableName}}",
@@ -718,7 +691,6 @@ func TestForeignKeyTableConstraint(t *testing.T) {
 }
 
 func TestTableOptions(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`WITHOUT ROWID`,
 		"CommaList{TableOption{TT}}",
@@ -730,7 +702,6 @@ func TestTableOptions(t *testing.T) {
 }
 
 func TestTableOption(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`WITHOUT ROWID`,
 		"TableOption{TT}",
@@ -744,7 +715,6 @@ func TestTableOption(t *testing.T) {
 }
 
 func TestColumnNameList(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`column_name_1, column_name_2`,
 		"CommaList{ColName T ColName}",
@@ -760,54 +730,54 @@ func TestColumnNameList(t *testing.T) {
 }
 
 func TestCreateTrigger(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN DELETE FROM table_name; END`,
 		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {TT QualifiedTableName{TableName}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) DELETE FROM table_name; END`,
-		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {With{T CommaList{CommonTableExpression{TableName T T Select{T E{T}} T }}}
+		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {WithClause{T CommaList{
+				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
 			TT QualifiedTableName{TableName}} TT}}`,
 		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT INTO table_name(name) VALUES('Go'); END;`,
 		`CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert{TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}} } TT}}`,
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN a > 10 BEGIN UPDATE 10; END`,
 		"CreateTrigger{TT TriggerName TTTT TableName T E{GreaterThan{ColRef{ColName} T T}} TriggerBody{T Update {T E{T}} TT}}",
 		`CREATE TRIGGER trigger_name UPDATE OF a, b ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT CommaList{ColName T ColName} T TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName TT CommaList{ColName T ColName} T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName T !ErrorMissing TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName T !ErrorMissing TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName TT !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10 END`,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Select {T E{T}} !ErrorMissing T}}",
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing T}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10; `,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Select {T E{T}} T !ErrorMissing}}",
+		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T !ErrorMissing}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN ; END`,
 		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T !ErrorExpecting TT}}",
 		`CREATE TEMP TRIGGER IF EXISTS trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT T !ErrorMissing T TriggerName TTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT T !ErrorMissing T TriggerName TTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMP TRIGGER IF NOT trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT TT !ErrorMissing TriggerName TTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT TT !ErrorMissing TriggerName TTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT TTT TriggerName T !ErrorExpecting T TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT TTT TriggerName T !ErrorExpecting T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMPORARY TRIGGER .trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT !ErrorMissing T TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT !ErrorMissing T TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMPORARY TRIGGER schema_name trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName !ErrorMissing TriggerName TTT TableName TTT TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT SchemaName !ErrorMissing TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName T !ErrorMissing T TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName T !ErrorMissing T TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TT !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TT !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT CommaList{ColName !ErrorMissing ColName} T TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName TT CommaList{ColName !ErrorMissing ColName} T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TTTT TableName T !ErrorMissing TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName TTTT TableName T !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName T !ErrorMissing TT TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT TriggerName T !ErrorMissing TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER INSTEAD OF UPDATE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT !ErrorMissing TTTT TableName TriggerBody{T Select {T E{T}} TT}}",
+		"CreateTrigger{TT !ErrorMissing TTTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name`,
 		"CreateTrigger{TT TriggerName TT TableName !ErrorMissing}",
 	)
@@ -816,39 +786,37 @@ func TestCreateTrigger(t *testing.T) {
 }
 
 func TestCreateView(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CREATE VIEW view_name AS SELECT 10`,
-		"CreateView{TT ViewName T Select{T E{T}}}",
+		"CreateView{TT ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW IF NOT EXISTS view_name AS SELECT 10`,
-		"CreateView{TTT TTT ViewName T Select{T E{T}}}",
+		"CreateView{TTT TTT ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMPORARY VIEW schema_name.view_name (a, b) AS SELECT 10`,
-		"CreateView{TTT SchemaName T ViewName  T CommaList{ColName T ColName} T T Select{T E{T}}}",
+		"CreateView{TTT SchemaName T ViewName  T CommaList{ColName T ColName} T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW IF EXISTS view_name AS SELECT 10`,
-		"CreateView{TTT T !ErrorMissing T ViewName T Select{T E{T}}}",
+		"CreateView{TTT T !ErrorMissing T ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW IF NOT view_name AS SELECT 10`,
-		"CreateView{TTT TT !ErrorMissing ViewName T Select{T E{T}}}",
+		"CreateView{TTT TT !ErrorMissing ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW AS SELECT 10`,
-		"CreateView{TTT !ErrorMissing T Select{T E{T}}}",
+		"CreateView{TTT !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW schema_name view_name AS SELECT 10`,
-		"CreateView{TTT SchemaName !ErrorMissing ViewName T Select{T E{T}}}",
+		"CreateView{TTT SchemaName !ErrorMissing ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW view_name AS `,
 		"CreateView{TTT ViewName T !ErrorMissing}",
 		`CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`,
-		"CreateView{TTT ViewName  T CommaList{ColName !ErrorMissing ColName} T T Select{T E{T}}}",
+		"CreateView{TTT ViewName  T CommaList{ColName !ErrorMissing ColName} T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`,
-		"CreateView{TTT ViewName  T CommaList{ColName T ColName} !ErrorMissing T Select{T E{T}}}",
+		"CreateView{TTT ViewName  T CommaList{ColName T ColName} !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW view_name SELECT 10`,
-		"CreateView{TTT ViewName !ErrorMissing Select{T E{T}}}",
+		"CreateView{TTT ViewName !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE VIEW .view_name AS SELECT 10`,
-		"CreateView{TT !ErrorMissing T ViewName T Select{T E{T}}}",
+		"CreateView{TT !ErrorMissing T ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 	)
 
 	runTests(t, cases, (*Parser).createView)
 }
 
 func TestCreateVirtualTable(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CREATE VIRTUAL TABLE table_name USING module_name`,
 		"CreateVirtualTable{TTT TableName T ModuleName}",
@@ -888,12 +856,11 @@ func TestCreateVirtualTable(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DELETE FROM table_name`,
 		"Delete{TT QualifiedTableName{TableName}}",
 		`DELETE FROM table_name WHERE a > b`,
-		"Delete{TT QualifiedTableName{TableName} Where{T E{GreaterThan{ColRef{ColName} T ColRef{ColName}}}}}",
+		"Delete{TT QualifiedTableName{TableName} WhereClause{T E{GreaterThan{ColRef{ColName} T ColRef{ColName}}}}}",
 		`DELETE FROM table_name RETURNING *`,
 		"Delete{TT QualifiedTableName{TableName} ReturningClause{T CommaList{ReturningItem{T}}}}",
 		`DELETE table_name`,
@@ -901,7 +868,7 @@ func TestDelete(t *testing.T) {
 		`DELETE FROM`,
 		"Delete{TT !ErrorMissing}",
 		`DELETE FROM table_name WHERE`,
-		"Delete{TT QualifiedTableName{TableName} Where{T !ErrorMissing}}",
+		"Delete{TT QualifiedTableName{TableName} WhereClause{T !ErrorMissing}}",
 		`DELETE FROM table_name RETURNING`,
 		"Delete{TT QualifiedTableName{TableName} ReturningClause{T !ErrorMissing}}",
 	)
@@ -909,44 +876,48 @@ func TestDelete(t *testing.T) {
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
 }
 
-func TestWith(t *testing.T) {
-	t.Parallel()
+func TestWithClause(t *testing.T) {
 	cases := testCases(
 		`WITH table_name AS (SELECT 10)`,
-		"With{T CommaList{CommonTableExpression{TableName TT Select{T E{T}} T}}}",
+		"WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
 		`WITH RECURSIVE table_name AS (SELECT 10)`,
-		"With{TT CommaList{CommonTableExpression{TableName TT Select{T E{T}} T}}}",
+		"WithClause{TT CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
 		`WITH table_name AS (SELECT 10), table_name2 AS (SELECT 10)`,
-		`With{T CommaList{CommonTableExpression{TableName TT Select{T E{T}} T} T
-					CommonTableExpression{TableName TT Select{T E{T}} T}}}`,
+		`WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T} T
+					CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}`,
+		`WITH table_name AS (WITH table_name_2 AS (SELECT 10) SELECT 10)`,
+		`WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{
+				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+					SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}`,
 		`WITH `,
-		"With{T !ErrorExpecting}",
+		"WithClause{T !ErrorExpecting}",
+		`WITH table_name AS (SELECT 10), `,
+		"WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T} T !ErrorMissing}}",
 	)
 
-	runTests(t, cases, (*Parser).with)
+	runTests(t, cases, (*Parser).withClause)
 }
 
 func TestCommonTableExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`table_name AS (SELECT 10)`,
-		"CommonTableExpression{TableName T T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS MATERIALIZED (SELECT 10)`,
-		"CommonTableExpression{TableName TT T Select{T E{T}} T}",
+		"CommonTableExpression{TableName TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS NOT MATERIALIZED (SELECT 10)`,
-		"CommonTableExpression{TableName T TT T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name (col_a, col_b) AS (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} T T T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} T T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name (col_a, col_b AS (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} !ErrorMissing T T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} !ErrorMissing T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS SELECT 10)`,
-		"CommonTableExpression{TableName T !ErrorMissing Select{T E{T}} T}",
+		"CommonTableExpression{TableName T !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS (SELECT 10`,
-		"CommonTableExpression{TableName T T Select{T E{T}} !ErrorMissing}",
+		"CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
 		`table_name (col_a, col_b) (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} T !ErrorMissing T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T CommaList{ColName T ColName} T !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS NOT (SELECT 10)`,
-		"CommonTableExpression{TableName T T !ErrorMissing T Select{T E{T}} T}",
+		"CommonTableExpression{TableName T T !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS ()`,
 		"CommonTableExpression{TableName T T !ErrorMissing T}",
 	)
@@ -955,7 +926,6 @@ func TestCommonTableExpression(t *testing.T) {
 }
 
 func TestQualifiedTableName(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`table_name`,
 		"QualifiedTableName{TableName}",
@@ -987,7 +957,6 @@ func TestQualifiedTableName(t *testing.T) {
 }
 
 func TestReturningClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`RETURNING *`,
 		"ReturningClause{T CommaList{ReturningItem{T}}}",
@@ -1010,7 +979,6 @@ func TestReturningClause(t *testing.T) {
 }
 
 func TestDetach(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DETACH temp`, "Detach{T SchemaName}",
 		`DETACH DATABASE temp`, "Detach{TT SchemaName}",
@@ -1021,7 +989,6 @@ func TestDetach(t *testing.T) {
 }
 
 func TestDropIndex(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DROP INDEX index_name`, "DropIndex{TT IndexName}",
 		`DROP INDEX IF EXISTS index_name`, "DropIndex{TT TT IndexName}",
@@ -1036,7 +1003,6 @@ func TestDropIndex(t *testing.T) {
 }
 
 func TestDropTable(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DROP TABLE table_name`, "DropTable{TT TableName}",
 		`DROP TABLE IF EXISTS table_name`, "DropTable{TT TT TableName}",
@@ -1051,7 +1017,6 @@ func TestDropTable(t *testing.T) {
 }
 
 func TestDropTrigger(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DROP TRIGGER trigger_name`, "DropTrigger{TT TriggerName}",
 		`DROP TRIGGER IF EXISTS trigger_name`, "DropTrigger{TT TT TriggerName}",
@@ -1066,7 +1031,6 @@ func TestDropTrigger(t *testing.T) {
 }
 
 func TestDropView(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`DROP VIEW view_name`, "DropView{TT ViewName}",
 		`DROP VIEW IF EXISTS view_name`, "DropView{TT TT ViewName}",
@@ -1081,7 +1045,6 @@ func TestDropView(t *testing.T) {
 }
 
 func TestExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`TRUE OR TRUE`, "E{Or{TTT}}",
 	)
@@ -1090,7 +1053,6 @@ func TestExpression(t *testing.T) {
 }
 
 func TestExpression1(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`TRUE OR TRUE`, "Or{TTT}",
 		`TRUE OR`, "Or{TT !ErrorMissing}",
@@ -1100,7 +1062,6 @@ func TestExpression1(t *testing.T) {
 }
 
 func TestExpression2(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`TRUE AND TRUE`, "And{TTT}",
 		`TRUE AND`, "And{TT !ErrorMissing}",
@@ -1110,7 +1071,6 @@ func TestExpression2(t *testing.T) {
 }
 
 func TestExpression3(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`NOT TRUE`, "Not{TT}",
 		`NOT`, "Not{T !ErrorMissing}",
@@ -1120,7 +1080,6 @@ func TestExpression3(t *testing.T) {
 }
 
 func TestExpression4(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a = c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
 		`a == c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
@@ -1161,7 +1120,6 @@ func TestExpression4(t *testing.T) {
 }
 
 func TestIsExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`10 IS 10`,
 		"Is{TTT}",
@@ -1189,7 +1147,6 @@ func TestIsExpression(t *testing.T) {
 }
 
 func TestBetween(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`10 BETWEEN 5 AND 15`,
 		`Between{TTTTT}`,
@@ -1208,7 +1165,6 @@ func TestBetween(t *testing.T) {
 }
 
 func TestNotBetween(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`10 NOT BETWEEN 5 AND 15`,
 		"NotBetween{TTTTTT}",
@@ -1227,11 +1183,15 @@ func TestNotBetween(t *testing.T) {
 }
 
 func TestIn(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`10 IN (10, 20)`, "In{TTT CommaList{TTT} T}",
 		`10 IN ()`, "In{TTTT}",
-		`10 IN (SELECT)`, "In{TTT Select{T} T}",
+		`10 IN (SELECT 10)`, "In{TTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`10 IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
+		`In{TTT SimpleSelect{
+				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
+		`10 IN (SELECT)`, "In{TTT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
 		`10 IN schema_name.table_name`, "In{TT SchemaName T TableName}",
 		`10 IN schema_a.table_function_a(10, 20)`, "In{TT SchemaName T TableFunctionName T CommaList{TTT} T }",
 		`10 IN (ALTER)`, "In{TTT !ErrorExpecting Skipped{T} T}",
@@ -1251,14 +1211,19 @@ func TestIn(t *testing.T) {
 }
 
 func TestNotIn(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`10 NOT IN (10, 20)`, "NotIn{TTTT CommaList{TTT} T}",
 		`10 NOT IN ()`, "NotIn{TTTTT}",
+		`10 NOT IN (SELECT 10)`, "NotIn{TTTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`10 NOT IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
+		`NotIn{TTTT SimpleSelect{
+				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 		`10 NOT IN schema_name.table_name`, "NotIn{TTT SchemaName T TableName}",
 		`10 NOT IN schema_a.table_function_a(10, 20)`, "NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T }",
 		`10 NOT IN table_a`, "NotIn{TTT TableName}",
-		`10 NOT IN (SELECT)`, "NotIn{TTTT Select{T} T}", `10 NOT IN (ALTER)`, "NotIn{TTTT !ErrorExpecting Skipped{T} T}",
+		`10 NOT IN (SELECT)`, "NotIn{TTTT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
+		`10 NOT IN (ALTER)`, "NotIn{TTTT !ErrorExpecting Skipped{T} T}",
 		`10 NOT IN (1`, `NotIn{TTTT CommaList{T} !ErrorMissing}`,
 		`10 NOT IN function()`, "NotIn{TTT TableFunctionName T !ErrorMissing T}",
 		`10 NOT IN function(10`, "NotIn{TTT TableFunctionName T CommaList{T} !ErrorMissing}",
@@ -1275,7 +1240,6 @@ func TestNotIn(t *testing.T) {
 }
 
 func TestIsStartOfExpressionAtLeast4(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
 		tok    *token.Token
 		result bool
@@ -1296,7 +1260,6 @@ func TestIsStartOfExpressionAtLeast4(t *testing.T) {
 }
 
 func TestExpression5(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a < c`, "LessThan{ColRef{ColName} T ColRef{ColName}}",
 		`a <= c`, "LessThanOrEqual{ColRef{ColName} T ColRef{ColName}}",
@@ -1309,7 +1272,6 @@ func TestExpression5(t *testing.T) {
 }
 
 func TestExpression6(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a & c`, "BitAnd{ColRef{ColName} T ColRef{ColName}}",
 		`a | c`, "BitOr{ColRef{ColName} T ColRef{ColName}}",
@@ -1322,7 +1284,6 @@ func TestExpression6(t *testing.T) {
 }
 
 func TestExpression7(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a + c`, "Add{ColRef{ColName} T ColRef{ColName}}",
 		`a - c`, "Subtract{ColRef{ColName} T ColRef{ColName}}",
@@ -1333,7 +1294,6 @@ func TestExpression7(t *testing.T) {
 }
 
 func TestExpression8(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a * c`, "Multiply{ColRef{ColName} T ColRef{ColName}}",
 		`a / c`, "Divide{ColRef{ColName} T ColRef{ColName}}",
@@ -1345,7 +1305,6 @@ func TestExpression8(t *testing.T) {
 }
 
 func TestExpression9(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a || c`, "Concatenate{ColRef{ColName} T ColRef{ColName}}",
 		`a -> c`, "Extract1{ColRef{ColName} T ColRef{ColName}}",
@@ -1357,7 +1316,6 @@ func TestExpression9(t *testing.T) {
 }
 
 func TestExpression10(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a`, "ColRef{ColName}",
 		`a COLLATE c`, "Collate{ColRef{ColName} T CollationName}",
@@ -1368,7 +1326,6 @@ func TestExpression10(t *testing.T) {
 }
 
 func TestExpression11(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`~a`, "BitNot{T ColRef{ColName}}",
 		`+a`, "PrefixPlus{T ColRef{ColName}}",
@@ -1380,15 +1337,14 @@ func TestExpression11(t *testing.T) {
 }
 
 func TestSimpleExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a`, "ColRef{ColName}",
 		`?`, "BindParameter",
 		`function_name()`, "FunctionCall{FunctionName TT}",
 		`(10)`, "ParenE{T CommaList{E{T}} T}",
 		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
-		`NOT EXISTS (SELECT 10)`, "Not{T Exists{T T Select{T E{T}} T}}",
-		`EXISTS (SELECT 10)`, "Exists{T T Select{T E{T}} T}",
+		`NOT EXISTS (SELECT 10)`, "Not{T Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
+		`EXISTS (SELECT 10)`, "Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`CASE WHEN TRUE THEN 10 END`, "Case{T When{T E{T} T E{T}} T}",
 		`RAISE (IGNORE)`, "Raise{TTTT}",
 	)
@@ -1397,7 +1353,6 @@ func TestSimpleExpression(t *testing.T) {
 }
 
 func TestIsStartOfExpression(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
 		tok    *token.Token
 		result bool
@@ -1418,7 +1373,6 @@ func TestIsStartOfExpression(t *testing.T) {
 }
 
 func TestIsLiteralValue(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
 		tok    *token.Token
 		result bool
@@ -1439,7 +1393,6 @@ func TestIsLiteralValue(t *testing.T) {
 }
 
 func TestIsBindParameter(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
 		tok    *token.Token
 		result bool
@@ -1460,7 +1413,6 @@ func TestIsBindParameter(t *testing.T) {
 }
 
 func TestColumnReference(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a`, "ColRef{ColName}",
 		`a.a`, "ColRef{TableName T ColName}",
@@ -1471,7 +1423,6 @@ func TestColumnReference(t *testing.T) {
 }
 
 func TestFunctionCall(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`func()`,
 		"FnCall{FnName TT}",
@@ -1490,24 +1441,23 @@ func TestFunctionCall(t *testing.T) {
 		`function() FILTER (a);`,
 		"FnCall{FnName TT FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}}",
 		`function(10 ORDER a);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}",
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}",
 		`function(10 ORDER BY);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT !ErrorMissing}} T}",
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT !ErrorMissing}} T}",
 		`function(10 ORDER BY a COLLATE);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT CommaList{ OrderingTerm{E{Collate{ColRef{ColName} T !ErrorMissing}}}} }} T}",
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{ OrderingTerm{E{Collate{ColRef{ColName} T !ErrorMissing}}}} }} T}",
 		`function(10 ORDER BY a NULLS);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}} T !ErrorExpecting}} }} T}",
+		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}} T !ErrorExpecting}} }} T}",
 	)
 
 	runTests(t, cases, (*Parser).functionCall)
 }
 
 func TestFunctionArguments(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`'a'`, "FnArgs{CommaList{E{T}}}",
 		`DISTINCT 'a'`, "FnArgs{T CommaList{E{T}}}",
-		`'a' ORDER BY a`, "FnArgs{CommaList{E{T}} OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}}",
+		`'a' ORDER BY a`, "FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}}",
 		`*`, "FnArgs{T}",
 		``, "FnArgs{!ErrorMissing}",
 	)
@@ -1515,17 +1465,16 @@ func TestFunctionArguments(t *testing.T) {
 	runTests(t, cases, (*Parser).functionArguments)
 }
 
-func TestOrderBy(t *testing.T) {
-	t.Parallel()
+func TestOrderByClause(t *testing.T) {
 	cases := testCases(
 		`ORDER BY a COLLATE c`,
-		"OrderBy{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
-		`ORDER a`, "OrderBy{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}",
-		`ORDER BY`, "OrderBy{TT !ErrorMissing}",
+		"OrderByClause{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
+		`ORDER a`, "OrderByClause{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}",
+		`ORDER BY`, "OrderByClause{TT !ErrorMissing}",
 	)
 
 	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.orderBy(func(t *token.Token) bool {
+		return p.orderByClause(func(t *token.Token) bool {
 			return t.Kind == token.KindEOF
 		})
 	}
@@ -1534,7 +1483,6 @@ func TestOrderBy(t *testing.T) {
 }
 
 func TestOrderingTerm(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`a ASC NULLS LAST`,
 		"OrderingTerm{E{ColRef{ColName}} TTT}",
@@ -1548,7 +1496,6 @@ func TestOrderingTerm(t *testing.T) {
 }
 
 func TestFilterClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`FILTER (WHERE a + b)`,
 		"FilterClause{TT T E{Add{ColRef{ColName} T ColRef{ColName}}} T}",
@@ -1566,26 +1513,25 @@ func TestFilterClause(t *testing.T) {
 }
 
 func TestOverClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`OVER window_a`,
 		"OverClause{T WindowName}",
 		`OVER ()`,
-		"OverClause{TTT}",
+		"OverClause{T WindowDefinition{TT}}",
 		`OVER (window_a PARTITION BY a, b));`,
-		"OverClause{TT WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}",
+		"OverClause{T WindowDefinition{T WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}}",
 		`OVER (ORDER BY a)`,
-		"OverClause{TT OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}",
+		"OverClause{T WindowDefinition{T OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}}",
 		`OVER (RANGE CURRENT ROW)`,
-		"OverClause{TT FrameSpec{TTT} T}",
+		"OverClause{T WindowDefinition{T FrameSpec{TTT} T}}",
 		`OVER ORDER BY a)`,
-		"OverClause{T !ErrorExpecting OrderBy{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}",
+		"OverClause{T !ErrorExpecting}",
 		`OVER (window_a PARTITION a));`,
-		"OverClause{TT WindowName PartitionBy{T !ErrorMissing CommaList{E{ColRef{ColName}}}} T}",
+		"OverClause{T WindowDefinition{T WindowName PartitionBy{T !ErrorMissing CommaList{E{ColRef{ColName}}}} T}}",
 		`OVER (window_a PARTITION BY));`,
-		"OverClause{TT WindowName PartitionBy{TT !ErrorMissing} T}",
+		"OverClause{T WindowDefinition{T WindowName PartitionBy{TT !ErrorMissing} T}}",
 		`OVER (RANGE CURRENT ROW`,
-		"OverClause{TT FrameSpec{TTT} !ErrorMissing}",
+		"OverClause{T WindowDefinition{T FrameSpec{TTT} !ErrorMissing}}",
 		`OVER`,
 		"OverClause{T !ErrorExpecting}",
 	)
@@ -1594,7 +1540,6 @@ func TestOverClause(t *testing.T) {
 }
 
 func TestFrameSpec(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS`,
 		"FrameSpec{TTTTTT}",
@@ -1624,7 +1569,6 @@ func TestFrameSpec(t *testing.T) {
 }
 
 func TestFrameSpecBetween(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING`,
 		"FrameSpecBetween{TTTT E{T} T}",
@@ -1664,7 +1608,6 @@ func TestFrameSpecBetween(t *testing.T) {
 }
 
 func TestParenExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`(TRUE = FALSE OR 10 == 20)`,
 		"ParenE{T CommaList{E{Or{Equal{TTT} T Equal{TTT}}}} T}",
@@ -1692,7 +1635,6 @@ func TestParenExpression(t *testing.T) {
 }
 
 func TestCastExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
 		`CAST 10 AS NUMBER);`,
@@ -1711,17 +1653,21 @@ func TestCastExpression(t *testing.T) {
 }
 
 func TestExists(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
-		`EXISTS(SELECT)`, "Exists{TT Select{T} T}",
+		`EXISTS(SELECT)`, "Exists{TT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
+		`EXISTS(SELECT 10)`, "Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`EXISTS(WITH table_name_a AS (SELECT 10) SELECT 10)`,
+		`Exists{TT SimpleSelect{
+				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 		`EXISTS SELECT 10);`,
-		"Exists{T !ErrorMissing Select{T Expression{T}} T}",
+		"Exists{T !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`EXISTS(10);`,
 		"Exists{TT Skipped{T} T}",
 		`EXISTS(10;`,
 		"Exists{TT Skipped{T}}",
 		`EXISTS (SELECT 10;`,
-		"Exists{TT Select{T Expression{T}} !ErrorMissing}",
+		"Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
 		`EXISTS ();`,
 		"Exists{TT !ErrorMissing T}",
 	)
@@ -1730,7 +1676,6 @@ func TestExists(t *testing.T) {
 }
 
 func TestCaseExpression(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`CASE WHEN 10 THEN TRUE ELSE FALSE END`, "Case{T When {T E{T} T E{T}} Else {T E{T}} T}",
 		`CASE a WHEN 10 THEN TRUE END`, "Case{T E{ColRef{ColName}} When {T E{T} T E{T}} T}",
@@ -1750,7 +1695,6 @@ func TestCaseExpression(t *testing.T) {
 }
 
 func TestWhen(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`WHEN 10 THEN TRUE`, "When {T E{T} T E{T}}",
 		`WHEN 10 THEN 'a' END);`, "When{T E{T} T E{T}}",
@@ -1764,7 +1708,6 @@ func TestWhen(t *testing.T) {
 }
 
 func TestCaseElse(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ELSE FALSE END`, "Else{T E{T}}",
 		`ELSE END`, "Else{T !ErrorMissing}",
@@ -1774,7 +1717,6 @@ func TestCaseElse(t *testing.T) {
 }
 
 func TestRaise(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`RAISE (IGNORE)`, "Raise{TTTT}",
 		`RAISE (ROLLBACK, 'error message')`, "Raise{TTTT ErrorMessage{E{T}} T}",
@@ -1800,7 +1742,6 @@ func TestRaise(t *testing.T) {
 }
 
 func TestInsert(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`INSERT INTO table_name(name) VALUES('Go')`,
 		`Insert{TT TableName T CommaList{ColumnName} T T
@@ -1819,9 +1760,9 @@ func TestInsert(t *testing.T) {
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}
 			UpsertClause{UpsertClauseItem{TT TT}}}`,
 		`INSERT INTO table_name(name) SELECT 'Go'`,
-		"Insert{TT TableName T CommaList{ColumnName} T Select{T E{T}}}",
+		"Insert{TT TableName T CommaList{ColumnName} T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`INSERT INTO table_name(name) SELECT 'Go' ON CONFLICT DO NOTHING`,
-		"Insert{TT TableName T CommaList{ColumnName} T Select{T E{T}} UpsertClause{UpsertClauseItem{TT TT}}}",
+		"Insert{TT TableName T CommaList{ColumnName} T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} UpsertClause{UpsertClauseItem{TT TT}}}",
 		`INSERT INTO table_name(name) DEFAULT VALUES`,
 		"Insert{TT TableName T CommaList{ColumnName} T TT}",
 		`INSERT INTO table_name(name) DEFAULT VALUES RETURNING *`,
@@ -1868,7 +1809,6 @@ func TestInsert(t *testing.T) {
 }
 
 func TestUpsertClause(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ON CONFLICT DO NOTHING ON CONFLICT DO NOTHING`,
 		"UpsertClause{UpsertClauseItem{TT TT} UpsertClauseItem{TT TT}}",
@@ -1878,7 +1818,6 @@ func TestUpsertClause(t *testing.T) {
 }
 
 func TestUpsertClauseItem(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`ON CONFLICT DO NOTHING`,
 		"UpsertClauseItem{TT TT}",
@@ -1889,12 +1828,12 @@ func TestUpsertClauseItem(t *testing.T) {
 		`ON CONFLICT DO UPDATE SET (col_a, col_b)='value_ab', col_c='value_c'`,
 		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} T T E{T}} T UpsertSetItem{ColName T E{T}}} }",
 		`ON CONFLICT DO UPDATE SET col='value' WHERE condition=true`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} Where{T E{Equal{ColRef{ColName} TT}}}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
 		`ON CONFLICT (col) DO NOTHING`,
 		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T TT}",
 		`ON CONFLICT (col_a, col_b) WHERE condition=true DO NOTHING`,
 		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}} T IndexedColumn{E{ColRef{ColName}}}} T
-			Where{T E{Equal{ColRef{ColName} T T}}} TT}`,
+			WhereClause{T E{Equal{ColRef{ColName} T T}}} TT}`,
 		`ON DO NOTHING`,
 		"UpsertClauseItem{T !ErrorMissing TT}",
 		`ON CONFLICT NOTHING`,
@@ -1905,7 +1844,7 @@ func TestUpsertClauseItem(t *testing.T) {
 		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing TT}",
 		`ON CONFLICT (col_a) WHERE DO NOTHING`,
 		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
-			Where{T !ErrorMissing} TT}`,
+			WhereClause{T !ErrorMissing} TT}`,
 		`ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`,
 		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{T CommaList{ColName T ColName} !ErrorMissing T E{T}} T UpsertSetItem{ColName T E{T}}} }",
 		`ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`,
@@ -1913,9 +1852,9 @@ func TestUpsertClauseItem(t *testing.T) {
 		`ON CONFLICT DO UPDATE col='value'`,
 		"UpsertClauseItem{TT TT !ErrorMissing CommaList{UpsertSetItem{ColName T E{T}}}}",
 		`ON CONFLICT DO UPDATE SET col='value' WHERE`,
-		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} Where{T !ErrorMissing}}} }",
+		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName T E{T}}} WhereClause{T !ErrorMissing}}} }",
 		`ON CONFLICT DO UPDATE SET WHERE condition=true`,
-		"UpsertClauseItem{TT TT T !ErrorExpecting Where{T E{Equal{ColRef{ColName} TT}}}}} }",
+		"UpsertClauseItem{TT TT T !ErrorExpecting WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
 		`ON CONFLICT DO UPDATE SET col 'value'`,
 		"UpsertClauseItem{TT TT T CommaList{UpsertSetItem{ColName !ErrorMissing E{T}}}}",
 		`ON CONFLICT DO UPDATE SET col=`,
@@ -1926,7 +1865,6 @@ func TestUpsertClauseItem(t *testing.T) {
 }
 
 func TestPragma(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`PRAGMA pragma_name`, "Pragma{T PragmaName}",
 		`PRAGMA temp.pragma_name`, "Pragma{T SchemaName T PragmaName}",
@@ -1948,7 +1886,6 @@ func TestPragma(t *testing.T) {
 }
 
 func TestReindex(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`REINDEX`, "Reindex{T}",
 		`REINDEX table_name`, "Reindex{T CollationTableOrIndexName}",
@@ -1961,7 +1898,6 @@ func TestReindex(t *testing.T) {
 }
 
 func TestRelease(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`RELEASE savepoint_name`, "Release{T SavepointName}",
 		`RELEASE SAVEPOINT savepoint_name`, "Release{TT SavepointName}",
@@ -1973,7 +1909,6 @@ func TestRelease(t *testing.T) {
 }
 
 func TestSavepoint(t *testing.T) {
-	t.Parallel()
 	cases := testCases(
 		`SAVEPOINT savepoint_name`, "Savepoint{T SavepointName}",
 		`SAVEPOINT`, "Savepoint{T !ErrorMissing}",
@@ -1982,12 +1917,269 @@ func TestSavepoint(t *testing.T) {
 	runTests(t, cases, (*Parser).savepoint)
 }
 
+func TestSelectStatement(t *testing.T) {
+	cases := testCases(
+		`SELECT 10`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}",
+		`SELECT 10 ORDER BY 20`, `SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}
+			OrderByClause{TT CommaList{OrderingTerm{E{T}}}}}`,
+		`SELECT 10 LIMIT 10`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} LimitClause{T E{T}}}",
+		`SELECT 10 ORDER BY 20 LIMIT 10`, `SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}
+			OrderByClause{TT CommaList{OrderingTerm{E{T}}}} LimitClause{T E{T}} }`,
+		`SELECT 10 UNION ALL SELECT 20`,
+		`CompoundSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{TT} 
+			SelectCore{T CommaList{ResultColumn{E{T}}}} }`,
+		`SELECT 10 UNION`,
+		`CompoundSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{T} 
+			!ErrorMissing }`,
+		`SELECT 10, LIMIT 10`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}} T !ErrorMissing}} LimitClause{T E{T}}}",
+		`SELECT 10 LIMIT`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} LimitClause{T !ErrorMissing}}",
+	)
+
+	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.selectStatement(nil) })
+}
+
+func TestSelectStatementCTE(t *testing.T) {
+	cases := testCases(
+		`WITH table_name AS (SELECT 10) SELECT 10`,
+		`SimpleSelect{WithClause{T CommaList{CommonTableExpression{TableName TT
+			SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+			SelectCore{T CommaList{ResultColumn{E{T}}}}}`,
+		`WITH table_name AS (SELECT 10) SELECT 10 INTERSECT SELECT 20`,
+		`CompoundSelect{WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+			SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{T} SelectCore{T CommaList{ResultColumn{E{T}}}}}`,
+	)
+
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			tp := newTestParser(newTestLexer(c.tree))
+			expected := tp.tree()
+
+			p := New(lexer.New([]byte(c.code)))
+			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
+			p.advance()
+			p.advance()
+
+			w := p.withClause()
+			parsed := p.selectStatement(w)
+
+			if str, equals := compare(c.code, p.comments, parsed, expected); !equals {
+				fmt.Println(c.code)
+				fmt.Println(str)
+				t.Fail()
+			}
+		})
+	}
+}
+
+func TestSelectCore(t *testing.T) {
+	cases := testCases(
+		`SELECT 10`, "SelectCore{T CommaList{ResultColumn{E{T}}}}",
+		`SELECT ALL 10, 20`, "SelectCore{T T CommaList{ResultColumn{E{T}} T ResultColumn{E{T}}}}",
+		`SELECT DISTINCT 10`, "SelectCore{T T CommaList{ResultColumn{E{T}}}}",
+		`SELECT 10 FROM table_name`, "SelectCore{T CommaList{ResultColumn{E{T}}} FromClause{T JoinClause{TableOrSubquery{TableName}}}}",
+		`SELECT 10 WHERE FALSE`, "SelectCore{T CommaList{ResultColumn{E{T}}} WhereClause{T E{T}}}",
+		`SELECT 10 GROUP BY 20`, "SelectCore{T CommaList{ResultColumn{E{T}}} GroupByClause{TT CommaList{E{T}}}}",
+		`SELECT 10 HAVING 20`, "SelectCore{T CommaList{ResultColumn{E{T}}} HavingClause{T E{T}}}",
+		`SELECT 10 WINDOW window_a AS (PARTITION BY 10)`,
+		`SelectCore{T CommaList{ResultColumn{E{T}}}
+			WindowClause{T CommaList{WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}}} }`,
+		`SELECT 10 WINDOW window_a AS (PARTITION BY 10), window_b AS (PARTITION BY 10)`,
+		`SelectCore{T CommaList{ResultColumn{E{T}}}
+			WindowClause{T CommaList{
+				WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}} T
+				WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}} }} }`,
+		`VALUES (10), (20)`, `SelectCore{ValuesClause{T CommaList{ValuesItem{T CommaList{E{T}} T} T ValuesItem{T CommaList{E{T}} T}}}}`,
+		`SELECT`, "SelectCore{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).selectCore)
+}
+
+func TestResultColumn(t *testing.T) {
+	cases := testCases(
+		`col`, "ResultColumn{E{ColRef{ColName}}}",
+		`col col_alias`, "ResultColumn{E{ColRef{ColName}} ColumnAlias}",
+		`col AS alias`, "ResultColumn{E{ColRef{ColName}} T ColumnAlias}",
+		`col AS`, "ResultColumn{E{ColRef{ColName}} T !ErrorMissing}",
+		`table_name.*`, "ResultColumn{TableName T T}",
+		`*`, "ResultColumn{T}",
+		`insert`, "ResultColumn{!ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).resultColumn)
+}
+
+func TestFromClause(t *testing.T) {
+	cases := testCases(
+		`FROM table_name`, "FromClause{T JoinClause{TableOrSubquery{TableName}}}",
+		`FROM 10`, "FromClause{T !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).fromClause)
+}
+
+func TestTableOrSubquery(t *testing.T) {
+	cases := testCases(
+		`table_name`, "TableOrSubquery{TableName}",
+		`table_name table_alias`, "TableOrSubquery{TableName TableAlias}",
+		`table_name AS table_alias`, "TableOrSubquery{TableName T TableAlias}",
+		`table_name INDEXED BY index_name`, "TableOrSubquery{TableName TT IndexName}",
+		`table_name NOT INDEXED`, "TableOrSubquery{TableName TT}",
+		`temp.table_name AS table_alias`, "TableOrSubquery{SchemaName T TableName T TableAlias}",
+		`table_function_name(10)`, "TableOrSubquery{TableFunctionName T CommaList{E{T}} T}",
+		`table_function_name(10, 20) AS table_alias`, "TableOrSubquery{TableFunctionName T CommaList{E{T} T E{T}} T T TableAlias}",
+		`table_function_name(10) table_alias`, "TableOrSubquery{TableFunctionName T CommaList{E{T}} T TableAlias}",
+		`(SELECT 10)`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`(SELECT 10) AS table_alias`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T T TableAlias}",
+		`(SELECT 10) table_alias`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T TableAlias}",
+		`(table_name)`, "TableOrSubquery{T JoinClause{TableOrSubquery{TableName}} T}",
+		`(table_name_1 JOIN table_name_2, table_name_2 ON a > 2)`,
+		`TableOrSubquery{T JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}
+			JoinOp{T} TableOrSubquery{TableName} JoinConstr{T E{GreaterThan{ColRef{ColName} TT}}} } T}`,
+		`.table_name`, "TableOrSubquery{!ErrorMissing T TableName}",
+		`schema_name.`, "TableOrSubquery{SchemaName T !ErrorExpecting}",
+		`table_name AS`, "TableOrSubquery{TableName T !ErrorMissing}",
+		`table_name INDEXED index_name`, "TableOrSubquery{TableName T !ErrorMissing IndexName}",
+		`table_name NOT`, "TableOrSubquery{TableName T !ErrorMissing}",
+		`table_function_name()`, "TableOrSubquery{TableFunctionName T !ErrorMissing T}",
+		`table_function_name(10`, "TableOrSubquery{TableFunctionName T CommaList{E{T}} !ErrorMissing}",
+		`table_function_name(10, 20) AS`, "TableOrSubquery{TableFunctionName T CommaList{E{T} T E{T}} T T !ErrorMissing}",
+		`(SELECT 10`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
+		`(SELECT 10) AS`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T T !ErrorMissing}",
+		`(table_name`, "TableOrSubquery{T JoinClause{TableOrSubquery{TableName}} !ErrorMissing}",
+		`()`, "TableOrSubquery{T !ErrorExpecting T}",
+	)
+
+	runTests(t, cases, (*Parser).tableOrSubquery)
+}
+
+func TestJoinClause(t *testing.T) {
+	cases := testCases(
+		`table_name`, "JoinClause{TableOrSubquery{TableName}}",
+		`table_name_1, table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
+		`table_name_1 JOIN table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
+		`table_name_1 FULL JOIN table_name_2 ON TRUE`,
+		"JoinClause{TableOrSubquery{TableName} JoinOp{TT} TableOrSubquery{TableName} JoinConstr{T E{T}}}",
+		`table_name_1 JOIN table_name_2, table_name_2 ON a > 2`,
+		`JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}
+			JoinOp{T} TableOrSubquery{TableName} JoinConstr{T E{GreaterThan{ColRef{ColName} TT}}} }`,
+		`table_name JOIN`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} !ErrorExpecting}",
+	)
+
+	runTests(t, cases, (*Parser).joinClause)
+}
+
+func TestJoinOperator(t *testing.T) {
+	cases := testCases(
+		`,`, "JoinOp{T}",
+		`JOIN`, "JoinOp{T}",
+		`CROSS JOIN`, "JoinOp{TT}",
+		`FULL JOIN`, "JoinOp{TT}",
+		`INNER JOIN`, "JoinOp{TT}",
+		`LEFT NATURAL JOIN`, "JoinOp{TTT}",
+		`OUTER RIGHT JOIN`, "JoinOp{TTT}",
+		`INNER OUTER JOIN`, "JoinOp{TTT}",
+		`LEFT NATURAL OUTER JOIN`, "JoinOp{TTTT}",
+		`FULL CROSS OUTER JOIN`, "JoinOp{TTTT}",
+		`NATURAL`, "JoinOp{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).joinOperator)
+}
+
+func TestJoinConstraint(t *testing.T) {
+	cases := testCases(
+		`ON true`, "JoinConstr{T E{T}}",
+		`USING (col_a, col_b)`, "JoinConstr{T T CommaList{ColName T ColName} T}",
+		`ON`, "JoinConstr{T !ErrorMissing}",
+		`USING col_a, col_b)`, "JoinConstr{T !ErrorMissing CommaList{ColName T ColName} T}",
+		`USING (col_a`, "JoinConstr{T T CommaList{ColName} !ErrorMissing}",
+		`USING ()`, "JoinConstr{T T !ErrorMissing T}",
+	)
+
+	runTests(t, cases, (*Parser).joinConstraint)
+}
+
+func TestGroupByClause(t *testing.T) {
+	cases := testCases(
+		`GROUP BY 10`, "GroupByClause{TT CommaList{E{T}}}",
+		`GROUP 10`, "GroupByClause{T !ErrorMissing CommaList{E{T}}}",
+		`GROUP BY `, "GroupByClause{TT !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).groupByClause)
+}
+
+func TestHavingClause(t *testing.T) {
+	cases := testCases(
+		`HAVING 10`, "HavingClause{T E{T}}",
+		`HAVING `, "HavingClause{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).havingClause)
+}
+
+func TestWindowClause(t *testing.T) {
+	cases := testCases(
+		`WINDOW window_a AS (PARTITION BY 10)`,
+		"WindowClause{T CommaList{WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}}}",
+		`WINDOW `,
+		"WindowClause{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).windowClause)
+}
+
+func TestWindowClauseItem(t *testing.T) {
+	cases := testCases(
+		`window_name AS (PARTITION BY 10)`,
+		"WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}",
+		`window_name (PARTITION BY 10)`,
+		"WindowClauseItem{WindowName !ErrorMissing WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}",
+		`window_name`,
+		"WindowClauseItem{WindowName !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).windowClauseItem)
+}
+
+func TestValuesClause(t *testing.T) {
+	cases := testCases(
+		`VALUES (10), (20)`, "ValuesClause{T CommaList{ValuesItem{T CommaList{E{T}} T} T ValuesItem{T CommaList{E{T}} T}}}",
+		`VALUES `, "ValuesClause{T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).valuesClause)
+}
+
+func TestValuesItem(t *testing.T) {
+	cases := testCases(
+		`(10, 20)`, "ValuesItem{T CommaList{E{T} T E{T}} T}",
+		`() `, "ValuesItem{T !ErrorMissing T}",
+	)
+
+	runTests(t, cases, (*Parser).valuesItem)
+}
+
+func TestLimitClause(t *testing.T) {
+	cases := testCases(
+		`LIMIT 10`, "LimitClause{T E{T}}",
+		`LIMIT 10, 20`, "LimitClause{T E{T} T E{T}}",
+		`LIMIT 10 OFFSET 20`, "LimitClause{T E{T} T E{T}}",
+		`LIMIT 10,`, "LimitClause{T E{T} T !ErrorMissing}",
+		`LIMIT 10 OFFSET`, "LimitClause{T E{T} T !ErrorMissing}",
+	)
+
+	runTests(t, cases, (*Parser).limitClause)
+}
+
 // runTests executes tests of the function parseFunc.
 func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFunc func(*Parser) T) {
 	for i, c := range cases {
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
-			t.Parallel()
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
@@ -2429,7 +2621,7 @@ var treeKinds = map[string]parsetree.Kind{}
 
 // init initializes treeKinds.
 func init() {
-	for i := parsetree.KindAdd; i <= parsetree.KindWith; i++ {
+	for i := parsetree.KindAdd; i <= parsetree.KindWithClause; i++ {
 		treeKinds[i.String()] = i
 	}
 	treeKinds["E"] = parsetree.KindExpression
@@ -2441,4 +2633,6 @@ func init() {
 	treeKinds["FnName"] = parsetree.KindFunctionName
 	treeKinds["FnCall"] = parsetree.KindFunctionCall
 	treeKinds["FnArgs"] = parsetree.KindFunctionArguments
+	treeKinds["JoinOp"] = parsetree.KindJoinOperator
+	treeKinds["JoinConstr"] = parsetree.KindJoinConstraint
 }
