@@ -122,6 +122,7 @@ func TestSQLStatement(t *testing.T) {
 		`SQLStatement{Update{
 				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
+		`VACUUM;`, "SQLStatement{Vacuum{T} T}",
 		`DROP`,
 		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
@@ -788,6 +789,16 @@ func TestCreateTrigger(t *testing.T) {
 		"CreateTrigger{TT !ErrorMissing TTTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name`,
 		"CreateTrigger{TT TriggerName TT TableName !ErrorMissing}",
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) ; END`,
+		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T WithClause{T CommaList{
+				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
+				!ErrorExpecting
+			TT}}`,
+		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) END`,
+		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T WithClause{T CommaList{
+				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
+				!ErrorExpecting
+			T}}`,
 	)
 
 	runTests(t, cases, (*Parser).createTrigger)
@@ -928,6 +939,10 @@ func TestCommonTableExpression(t *testing.T) {
 		"CommonTableExpression{TableName T T !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS ()`,
 		"CommonTableExpression{TableName T T !ErrorMissing T}",
+		`table_name AS (WITH cte AS (SELECT 10))`,
+		`CommonTableExpression{TableName T T WithClause{T CommaList{
+				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
+				!ErrorMissing T}`,
 	)
 
 	runTests(t, cases, (*Parser).commonTableExpression)
@@ -1775,6 +1790,14 @@ func TestInsert(t *testing.T) {
 		"Insert{TT TableName T CommaList{ColumnName} T TT}",
 		`INSERT INTO table_name(name) DEFAULT VALUES RETURNING *`,
 		"Insert{TT TableName T CommaList{ColumnName} T TT ReturningClause{T CommaList{ReturningItem{T}}}}",
+		`INSERT INTO table_name(name) WITH cte AS (SELECT 10) SELECT 'Go'`,
+		`Insert{TT TableName T CommaList{ColumnName} T SimpleSelect{
+			WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+			SelectCore{T CommaList{ResultColumn{E{T}}}}}}`,
+		`INSERT INTO table_name(name) WITH cte AS (SELECT 10)`,
+		`Insert{TT TableName T CommaList{ColumnName} T
+			WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+			!ErrorMissing}`,
 		`INSERT OR INTO table_name(name) VALUES('Go')`,
 		`Insert{T T !ErrorExpecting T TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
@@ -2219,6 +2242,16 @@ func TestUpdate(t *testing.T) {
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })
 }
 
+func TestVacuum(t *testing.T) {
+	cases := testCases(
+		`VACUUM`, "Vacuum{T}",
+		`VACUUM temp`, "Vacuum{T SchemaName}",
+		`VACUUM INTO 'db.db'`, "Vacuum{T T FileName{E{T}}}",
+		`VACUUM INTO`, "Vacuum{T T !ErrorMissing}",
+	)
+	runTests(t, cases, (*Parser).vacuum)
+}
+
 // runTests executes tests of the function parseFunc.
 func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFunc func(*Parser) T) {
 	for i, c := range cases {
@@ -2319,7 +2352,7 @@ func (c *comparator) compare(parsed, expected parsetree.Construction) bool {
 			panic(fmt.Errorf("unknown type: %T", p))
 		}
 	} else if parsed != nil && expected == nil {
-		fmt.Fprintf(c.tw, "%s%s\t\t\n", strings.Repeat(c.indent, c.indentLevel), parsed.Kind())
+		fmt.Fprintf(c.tw, "%s%s\t%s<nil>\t\n", strings.Repeat(c.indent, c.indentLevel), parsed.Kind(), strings.Repeat(c.indent, c.indentLevel))
 
 		nt, ok := parsed.(parsetree.NonTerminal)
 		if !ok {
@@ -2333,7 +2366,7 @@ func (c *comparator) compare(parsed, expected parsetree.Construction) bool {
 		}
 		return false
 	} else if parsed == nil && expected != nil {
-		fmt.Fprintf(c.tw, "\t%s%s\t\n", strings.Repeat(c.indent, c.indentLevel), expected.Kind())
+		fmt.Fprintf(c.tw, "%s<nil>\t%s%s\t\n", strings.Repeat(c.indent, c.indentLevel), strings.Repeat(c.indent, c.indentLevel), expected.Kind())
 
 		nt, ok := expected.(parsetree.NonTerminal)
 		if !ok {

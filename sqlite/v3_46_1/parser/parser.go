@@ -149,6 +149,8 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		father.AddChild(p.selectStatement(nil))
 	case token.KindUpdate:
 		father.AddChild(p.update(nil))
+	case token.KindVacuum:
+		father.AddChild(p.vacuum())
 	}
 
 	if p.tok[0].Kind == token.KindSemicolon {
@@ -1530,8 +1532,17 @@ func (p *Parser) triggerBody() parsetree.NonTerminal {
 		} else if p.tok[0].Kind == token.KindUpdate {
 			nt.AddChild(p.update(withClause))
 		} else if p.tok[0].Kind == token.KindSemicolon {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "WITH", "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
+			if withClause != nil {
+				nt.AddChild(withClause)
+				nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
+			} else {
+				nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "WITH", "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
+			}
 		} else {
+			if withClause != nil {
+				nt.AddChild(withClause)
+				nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
+			}
 			break
 		}
 
@@ -1931,6 +1942,9 @@ func (p *Parser) commonTableExpression() parsetree.NonTerminal {
 	if p.tok[0].Kind == token.KindSelect {
 		nt.AddChild(p.selectStatement(withClause))
 	} else if p.tok[0].Kind == token.KindRightParen {
+		if withClause != nil {
+			nt.AddChild(withClause)
+		}
 		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing select statement`)))
 	}
 
@@ -4000,9 +4014,16 @@ func (p *Parser) insert(withClause parsetree.NonTerminal) parsetree.NonTerminal 
 			nt.AddChild(p.upsertClause())
 		}
 	} else if p.tok[0].Kind == token.KindWith || p.tok[0].Kind == token.KindSelect {
-		// TODO: parse the WITH clause
+		var withClause parsetree.NonTerminal
+		if p.tok[0].Kind == token.KindWith {
+			withClause = p.withClause()
+		}
+
 		if p.tok[0].Kind == token.KindSelect {
-			nt.AddChild(p.selectStatement(nil))
+			nt.AddChild(p.selectStatement(withClause))
+		} else if withClause != nil {
+			nt.AddChild(withClause)
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing select`)))
 		}
 
 		if p.tok[0].Kind == token.KindOn {
@@ -5015,6 +5036,33 @@ func (p *Parser) updateSetItemList() parsetree.NonTerminal {
 			nt.AddChild(p.updateSetItem())
 		} else {
 			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing update set item`)))
+		}
+	}
+
+	return nt
+}
+
+// vacuum parses a vacuum statement.
+func (p *Parser) vacuum() parsetree.NonTerminal {
+	nt := parsetree.NewNonTerminal(parsetree.KindVacuum)
+	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	p.advance()
+
+	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
+		p.advance()
+	}
+
+	if p.tok[0].Kind == token.KindInto {
+		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+		p.advance()
+
+		if p.isStartOfExpression(p.tok[0]) {
+			fn := parsetree.NewNonTerminal(parsetree.KindFileName)
+			fn.AddChild(p.expression())
+			nt.AddChild(fn)
+		} else {
+			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing file name`)))
 		}
 	}
 

@@ -70,6 +70,7 @@ const (
 	KindExpression
 	KindExtract1
 	KindExtract2
+	KindFileName
 	KindFilterClause
 	KindForeignKeyClause
 	KindForeignKeyColumnConstraint
@@ -172,6 +173,7 @@ const (
 	KindUpdateSetItem
 	KindUpsertClause
 	KindUpsertClauseItem
+	KindVacuum
 	KindValuesClause
 	KindValuesItem
 	KindViewName
@@ -201,7 +203,7 @@ var kindStrings = []string{
 	"CompoundSelect", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable",
 	"DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable", "DropTrigger", "DropView", "Else", "Equal",
 	"ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2",
-	"FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FromClause",
+	"FileName", "FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FromClause",
 	"FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "GroupByClause",
 	"HavingClause", "In", "IndexName", "IndexedColumn", "Insert", "InsertValuesItem", "InsertValuesList", "Is", "IsDistinctFrom", "IsNot",
 	"IsNotDistinctFrom", "Isnull", "JoinClause", "JoinConstraint", "JoinOperator", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "LimitClause",
@@ -211,7 +213,7 @@ var kindStrings = []string{
 	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement",
 	"Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "Subtract", "TableAlias",
 	"TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "TableOrSubquery", "Token", "TriggerBody", "TriggerName",
-	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpdateSetItem", "UpsertClause", "UpsertClauseItem", "ValuesClause",
+	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpdateSetItem", "UpsertClause", "UpsertClauseItem", "Vacuum", "ValuesClause",
 	"ValuesItem", "ViewName", "When", "WhereClause", "WindowClause", "WindowClauseItem", "WindowDefinition", "WindowName", "WithClause",
 }
 
