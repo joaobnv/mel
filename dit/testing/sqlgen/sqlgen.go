@@ -32,7 +32,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 	ss.generator = newConcat(
 		newOptional(newKeywordGen(token.KindExplain)),
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
-		newOr(gf.analyze(), gf.begin(), gf.pragma()),
+		newOr(gf.analyze(), gf.begin(), gf.commit(), gf.pragma()),
 	)
 }
 
@@ -62,6 +62,17 @@ func (b *begin) build(gf *genFactory) {
 			newEpsilon(), newKeywordGen(token.KindDeferred),
 			newKeywordGen(token.KindImmediate), newKeywordGen(token.KindExclusive),
 		),
+		newOptional(newKeywordGen(token.KindTransaction)),
+	)
+}
+
+type commit struct {
+	generator
+}
+
+func (c *commit) build(gf *genFactory) {
+	c.generator = newConcat(
+		newOr(newKeywordGen(token.KindCommit), newKeywordGen(token.KindEnd)),
 		newOptional(newKeywordGen(token.KindTransaction)),
 	)
 }

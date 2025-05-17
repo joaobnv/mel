@@ -139,6 +139,11 @@ func TestFirstDifferFromLast(t *testing.T) {
 			firsts: []token.Kind{token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin},
 			lasts:  []token.Kind{token.KindBegin, token.KindTransaction, token.KindDeferred, token.KindTransaction, token.KindImmediate, token.KindTransaction},
 		}, {
+			g:      gf.commit(),
+			strs:   []string{"commit", "commit transaction", "end", "end transaction"},
+			firsts: []token.Kind{token.KindCommit, token.KindCommit, token.KindEnd, token.KindEnd},
+			lasts:  []token.Kind{token.KindCommit, token.KindTransaction, token.KindEnd, token.KindTransaction},
+		}, {
 			g:    gf.pragma(),
 			pos:  []int{0, 1, 20, 39, 46, 63},
 			strs: []string{"pragma a", "pragma a=1", "pragma a(1)", "pragma a.a", "pragma a.a=a", "pragma a.a(+1)"},

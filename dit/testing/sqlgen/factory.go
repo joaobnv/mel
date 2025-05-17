@@ -2,13 +2,14 @@ package sqlgen
 
 // genFactory creates generators. Note that the generators can create cycles. Then this factory handle this.
 type genFactory struct {
-	ss *sqlStmt
-	an *analyze
-	bg *begin
-	pg *pragma
-	pv *pragmaValue
-	sn *signedNumber
-	sl *signedLiteral
+	ss  *sqlStmt
+	an  *analyze
+	bg  *begin
+	com *commit
+	pg  *pragma
+	pv  *pragmaValue
+	sn  *signedNumber
+	sl  *signedLiteral
 }
 
 func newGenFactory() *genFactory {
@@ -17,6 +18,7 @@ func newGenFactory() *genFactory {
 	gf.sqlStmt().build(gf)
 	gf.analyze().build(gf)
 	gf.begin().build(gf)
+	gf.commit().build(gf)
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -44,6 +46,13 @@ func (gf *genFactory) begin() *begin {
 		gf.bg = &begin{}
 	}
 	return gf.bg
+}
+
+func (gf *genFactory) commit() *commit {
+	if gf.com == nil {
+		gf.com = &commit{}
+	}
+	return gf.com
 }
 
 func (gf *genFactory) pragma() *pragma {
