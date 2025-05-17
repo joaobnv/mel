@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // Foreground represents a foreground color.

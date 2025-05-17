@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/transform/lexical/color"
+	"github.com/joaobnv/mel/dit/token"
+	"github.com/joaobnv/mel/dit/transform/lexical/color"
 )
 
 // resetToken is the token used for removing the color that was applied to a token.

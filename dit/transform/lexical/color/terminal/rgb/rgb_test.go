@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/lexer"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/transform/lexical"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/transform/lexical/color"
+	"github.com/joaobnv/mel/dit/lexer"
+	"github.com/joaobnv/mel/dit/token"
+	"github.com/joaobnv/mel/dit/transform/lexical"
+	"github.com/joaobnv/mel/dit/transform/lexical/color"
 )
 
 func TestColor(t *testing.T) {

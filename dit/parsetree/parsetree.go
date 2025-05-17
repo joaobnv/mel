@@ -4,7 +4,7 @@ package parsetree
 import (
 	"strconv"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // Kind is the kind of the tree.

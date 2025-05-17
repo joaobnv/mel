@@ -14,9 +14,9 @@ import (
 	"text/tabwriter"
 	"unicode"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/lexer"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/parsetree"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/lexer"
+	"github.com/joaobnv/mel/dit/parsetree"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // testCase is a test case.

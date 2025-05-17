@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/lexer"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/parsetree"
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/lexer"
+	"github.com/joaobnv/mel/dit/parsetree"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // Parser is a parser for the SQL.

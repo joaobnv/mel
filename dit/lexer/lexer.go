@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // keywords is a map from the keywords of the language to the kind of the keyword token.

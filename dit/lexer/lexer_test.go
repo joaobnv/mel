@@ -10,7 +10,7 @@ import (
 	"testing"
 	"text/tabwriter"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // TestLexer tests the lexer.

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 // TokenProvider is a interface for tokens providers, like the v3_46_1/lexer.Lexer and the Transformer.

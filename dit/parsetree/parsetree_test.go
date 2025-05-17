@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
+	"github.com/joaobnv/mel/dit/token"
 )
 
 func TestParseTree(t *testing.T) {
