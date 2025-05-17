@@ -4,6 +4,7 @@ package sqlgen
 type genFactory struct {
 	ss *sqlStmt
 	an *analyze
+	bg *begin
 	pg *pragma
 	pv *pragmaValue
 	sn *signedNumber
@@ -15,6 +16,7 @@ func newGenFactory() *genFactory {
 
 	gf.sqlStmt().build(gf)
 	gf.analyze().build(gf)
+	gf.begin().build(gf)
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -35,6 +37,13 @@ func (gf *genFactory) analyze() *analyze {
 		gf.an = &analyze{}
 	}
 	return gf.an
+}
+
+func (gf *genFactory) begin() *begin {
+	if gf.bg == nil {
+		gf.bg = &begin{}
+	}
+	return gf.bg
 }
 
 func (gf *genFactory) pragma() *pragma {

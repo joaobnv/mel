@@ -120,25 +120,26 @@ func (tc *testCase) run(t *testing.T) {
 func TestFirstDifferFromLast(t *testing.T) {
 	gf := newGenFactory()
 	cases := []testCase2{
-		{g: gf.sqlStmt(),
-			pos:  []int{0, 78, 117, 234, 351},
-			strs: []string{"analyze"},
-			firsts: []token.Kind{
-				token.KindAnalyze,
-			},
-			lasts: []token.Kind{
-				token.KindAnalyze,
-			},
-		}, {g: gf.analyze(),
-			pos:  []int{0},
-			strs: []string{"analyze", "analyze a", "analyze temp"},
-			firsts: []token.Kind{
-				token.KindAnalyze, token.KindAnalyze, token.KindAnalyze,
-			},
-			lasts: []token.Kind{
-				token.KindAnalyze, token.KindIdentifier, token.KindTemp,
-			},
-		}, {g: gf.pragma(),
+		{
+			g:      gf.sqlStmt(),
+			pos:    []int{0, 78, 117, 234, 351},
+			strs:   []string{"analyze"},
+			firsts: []token.Kind{token.KindAnalyze},
+			lasts:  []token.Kind{token.KindAnalyze},
+		}, {
+			g:      gf.analyze(),
+			pos:    []int{0},
+			strs:   []string{"analyze", "analyze a", "analyze temp"},
+			firsts: []token.Kind{token.KindAnalyze, token.KindAnalyze, token.KindAnalyze},
+			lasts:  []token.Kind{token.KindAnalyze, token.KindIdentifier, token.KindTemp},
+		}, {
+			g:      gf.begin(),
+			pos:    []int{0, 1, 2, 3, 4, 7},
+			strs:   []string{"begin", "begin transaction", "begin deferred", "begin deferred transaction", "begin immediate", "begin exclusive transaction"},
+			firsts: []token.Kind{token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin, token.KindBegin},
+			lasts:  []token.Kind{token.KindBegin, token.KindTransaction, token.KindDeferred, token.KindTransaction, token.KindImmediate, token.KindTransaction},
+		}, {
+			g:    gf.pragma(),
 			pos:  []int{0, 1, 20, 39, 46, 63},
 			strs: []string{"pragma a", "pragma a=1", "pragma a(1)", "pragma a.a", "pragma a.a=a", "pragma a.a(+1)"},
 			firsts: []token.Kind{
@@ -147,29 +148,25 @@ func TestFirstDifferFromLast(t *testing.T) {
 			lasts: []token.Kind{
 				token.KindIdentifier, token.KindNumeric, token.KindRightParen, token.KindIdentifier, token.KindIdentifier, token.KindRightParen,
 			},
-		}, {g: gf.pragmaValue(),
-			pos:  []int{0, 4, 6, 7},
-			strs: []string{"1", "+1", "a", "'a'"},
-			firsts: []token.Kind{
-				token.KindNumeric, token.KindPlus, token.KindIdentifier, token.KindString,
-			},
-			lasts: []token.Kind{
-				token.KindNumeric, token.KindNumeric, token.KindIdentifier, token.KindString,
-			},
-		}, {g: gf.signedLiteral(),
-			pos:  []int{0, 5, 10},
-			strs: []string{"'a'", "-X'ab'", "+1"},
-			firsts: []token.Kind{
-				token.KindString, token.KindMinus, token.KindPlus,
-			},
-			lasts: []token.Kind{
-				token.KindString, token.KindBlob, token.KindNumeric,
-			},
-		}, {g: gf.signedNumber(),
+		}, {
+			g:      gf.pragmaValue(),
+			pos:    []int{0, 4, 6, 7},
+			strs:   []string{"1", "+1", "a", "'a'"},
+			firsts: []token.Kind{token.KindNumeric, token.KindPlus, token.KindIdentifier, token.KindString},
+			lasts:  []token.Kind{token.KindNumeric, token.KindNumeric, token.KindIdentifier, token.KindString},
+		}, {
+			g:      gf.signedLiteral(),
+			pos:    []int{0, 5, 10},
+			strs:   []string{"'a'", "-X'ab'", "+1"},
+			firsts: []token.Kind{token.KindString, token.KindMinus, token.KindPlus},
+			lasts:  []token.Kind{token.KindString, token.KindBlob, token.KindNumeric},
+		}, {
+			g:      gf.signedNumber(),
 			strs:   []string{"1", "1.5", "-1", "-1.5", "+1", "+1.5"},
 			firsts: []token.Kind{token.KindNumeric, token.KindNumeric, token.KindMinus, token.KindMinus, token.KindPlus, token.KindPlus},
 			lasts:  []token.Kind{token.KindNumeric, token.KindNumeric, token.KindNumeric, token.KindNumeric, token.KindNumeric, token.KindNumeric},
-		}, {g: newConcat(newOr(newIdGen(), newStringGen()), newOr(newIdGen(), newStringGen())),
+		}, {
+			g:      newConcat(newOr(newIdGen(), newStringGen()), newOr(newIdGen(), newStringGen())),
 			strs:   []string{"a a", "a 'a'", "'a'a", "'a' 'a'"},
 			firsts: []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindString, token.KindString},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindString, token.KindIdentifier, token.KindString},
