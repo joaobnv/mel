@@ -14,62 +14,6 @@ func Syntax(maxTurnsInCycle int) iter.Seq[string] {
 	return gf.sqlStmt().gen(nil, maxTurnsInCycle)
 }
 
-// genFactory creates generators. Note that the generators can create cycles. Then this factory handle this.
-type genFactory struct {
-	ss *sqlStmt
-	pg *pragma
-	pv *pragmaValue
-	sn *signedNumber
-	sl *signedLiteral
-}
-
-func newGenFactory() *genFactory {
-	gf := new(genFactory)
-
-	gf.sqlStmt().build(gf)
-	gf.pragma().build(gf)
-	gf.pragmaValue().build(gf)
-	gf.signedNumber().build()
-	gf.signedLiteral().build()
-
-	return gf
-}
-
-func (gf *genFactory) sqlStmt() *sqlStmt {
-	if gf.ss == nil {
-		gf.ss = &sqlStmt{}
-	}
-	return gf.ss
-}
-
-func (gf *genFactory) pragma() *pragma {
-	if gf.pg == nil {
-		gf.pg = &pragma{}
-	}
-	return gf.pg
-}
-
-func (gf *genFactory) pragmaValue() *pragmaValue {
-	if gf.pv == nil {
-		gf.pv = &pragmaValue{}
-	}
-	return gf.pv
-}
-
-func (gf *genFactory) signedNumber() *signedNumber {
-	if gf.sn == nil {
-		gf.sn = &signedNumber{}
-	}
-	return gf.sn
-}
-
-func (gf *genFactory) signedLiteral() *signedLiteral {
-	if gf.sl == nil {
-		gf.sl = &signedLiteral{}
-	}
-	return gf.sl
-}
-
 type generator interface {
 	gen(stack []generator, maxTurnsInCycle int) iter.Seq[string]
 	// firstTokenKind returns the first token kind of the previous string yielded by gen. The
@@ -88,7 +32,22 @@ func (ss *sqlStmt) build(gf *genFactory) {
 	ss.generator = newConcat(
 		newOptional(newKeywordGen(token.KindExplain)),
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
-		newOr(gf.pragma()),
+		newOr(gf.analyze(), gf.pragma()),
+	)
+}
+
+type analyze struct {
+	generator
+}
+
+func (a *analyze) build(gf *genFactory) {
+	a.generator = newConcat(
+		newKeywordGen(token.KindAnalyze),
+		newOptional(
+			newConcat(
+				newSchemaName(),
+				newOptional(newConcat(newOperatorGen(token.KindDot), newIdGen()))),
+		),
 	)
 }
 
@@ -99,7 +58,7 @@ type pragma struct {
 func (p *pragma) build(gf *genFactory) {
 	p.generator = newConcat(
 		newKeywordGen(token.KindPragma),
-		newOptional(newConcat(newIdGen(), newOperatorGen(token.KindDot))),
+		newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
 		newIdGen(),
 		newOr(
 			newEpsilon(),
@@ -107,6 +66,14 @@ func (p *pragma) build(gf *genFactory) {
 			newConcat(newPuctuationGen(token.KindLeftParen), gf.pragmaValue(), newPuctuationGen(token.KindRightParen)),
 		),
 	)
+}
+
+type schemaName struct {
+	generator
+}
+
+func newSchemaName() generator {
+	return &schemaName{newOr(newIdGen(), newKeywordGen(token.KindTemp))}
 }
 
 type pragmaValue struct {

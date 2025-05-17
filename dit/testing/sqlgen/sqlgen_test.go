@@ -11,7 +11,7 @@ import (
 
 func TestSyntax(t *testing.T) {
 	for str := range Syntax(0) {
-		want := "pragma a"
+		want := "analyze"
 		if str != want {
 			t.Errorf("got %q, want %q", str, want)
 		}
@@ -121,13 +121,22 @@ func TestFirstDifferFromLast(t *testing.T) {
 	gf := newGenFactory()
 	cases := []testCase2{
 		{g: gf.sqlStmt(),
-			pos:  []int{0, 78, 156, 234},
-			strs: []string{"pragma a", "query plan pragma a", "explain pragma a", "explain query plan pragma a"},
+			pos:  []int{0, 78, 117, 234, 351},
+			strs: []string{"analyze"},
 			firsts: []token.Kind{
-				token.KindPragma, token.KindQuery, token.KindExplain, token.KindExplain,
+				token.KindAnalyze,
 			},
 			lasts: []token.Kind{
-				token.KindIdentifier, token.KindIdentifier, token.KindIdentifier, token.KindIdentifier,
+				token.KindAnalyze,
+			},
+		}, {g: gf.analyze(),
+			pos:  []int{0},
+			strs: []string{"analyze", "analyze a", "analyze temp"},
+			firsts: []token.Kind{
+				token.KindAnalyze, token.KindAnalyze, token.KindAnalyze,
+			},
+			lasts: []token.Kind{
+				token.KindAnalyze, token.KindIdentifier, token.KindTemp,
 			},
 		}, {g: gf.pragma(),
 			pos:  []int{0, 1, 20, 39, 46, 63},
