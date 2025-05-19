@@ -32,7 +32,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 	ss.generator = newConcat(
 		newOptional(newKeywordGen(token.KindExplain)),
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
-		newOr(gf.analyze(), gf.begin(), gf.commit(), gf.pragma()),
+		newOr(gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.pragma()),
 	)
 }
 
@@ -74,6 +74,18 @@ func (c *commit) build(gf *genFactory) {
 	c.generator = newConcat(
 		newOr(newKeywordGen(token.KindCommit), newKeywordGen(token.KindEnd)),
 		newOptional(newKeywordGen(token.KindTransaction)),
+	)
+}
+
+type detach struct {
+	generator
+}
+
+func (d *detach) build(gf *genFactory) {
+	d.generator = newConcat(
+		newKeywordGen(token.KindDetach),
+		newOptional(newKeywordGen(token.KindDatabase)),
+		newSchemaName(),
 	)
 }
 

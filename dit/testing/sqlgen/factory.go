@@ -6,6 +6,7 @@ type genFactory struct {
 	an  *analyze
 	bg  *begin
 	com *commit
+	de  *detach
 	pg  *pragma
 	pv  *pragmaValue
 	sn  *signedNumber
@@ -19,6 +20,7 @@ func newGenFactory() *genFactory {
 	gf.analyze().build(gf)
 	gf.begin().build(gf)
 	gf.commit().build(gf)
+	gf.detach().build(gf)
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -53,6 +55,13 @@ func (gf *genFactory) commit() *commit {
 		gf.com = &commit{}
 	}
 	return gf.com
+}
+
+func (gf *genFactory) detach() *detach {
+	if gf.de == nil {
+		gf.de = &detach{}
+	}
+	return gf.de
 }
 
 func (gf *genFactory) pragma() *pragma {
