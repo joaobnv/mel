@@ -149,6 +149,12 @@ func TestFirstDifferFromLast(t *testing.T) {
 			firsts: []token.Kind{token.KindDetach, token.KindDetach, token.KindDetach, token.KindDetach},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindTemp, token.KindIdentifier, token.KindTemp},
 		}, {
+			g:      gf.dropIndex(),
+			pos:    []int{0, 2, 5},
+			strs:   []string{"drop index a", "drop index temp.a", "drop index if exists temp.a"},
+			firsts: []token.Kind{token.KindDrop, token.KindDrop, token.KindDrop},
+			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
+		}, {
 			g:    gf.pragma(),
 			pos:  []int{0, 1, 20, 39, 46, 63},
 			strs: []string{"pragma a", "pragma a=1", "pragma a(1)", "pragma a.a", "pragma a.a=a", "pragma a.a(+1)"},
