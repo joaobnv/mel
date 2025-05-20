@@ -9,6 +9,7 @@ type genFactory struct {
 	de  *detach
 	di  *dropIndex
 	dt  *dropTable
+	dg  *dropTrigger
 	pg  *pragma
 	pv  *pragmaValue
 	sn  *signedNumber
@@ -25,6 +26,7 @@ func newGenFactory() *genFactory {
 	gf.detach().build(gf)
 	gf.dropIndex().build(gf)
 	gf.dropTable().build(gf)
+	gf.dropTrigger().build(gf)
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -80,6 +82,13 @@ func (gf *genFactory) dropTable() *dropTable {
 		gf.dt = &dropTable{}
 	}
 	return gf.dt
+}
+
+func (gf *genFactory) dropTrigger() *dropTrigger {
+	if gf.dg == nil {
+		gf.dg = &dropTrigger{}
+	}
+	return gf.dg
 }
 
 func (gf *genFactory) pragma() *pragma {

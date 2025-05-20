@@ -34,7 +34,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
-			gf.pragma(),
+			gf.dropTrigger(), gf.pragma(),
 		),
 	)
 }
@@ -114,6 +114,20 @@ func (dt *dropTable) build(gf *genFactory) {
 	dt.generator = newConcat(
 		newKeywordGen(token.KindDrop),
 		newKeywordGen(token.KindTable),
+		newOptional(newConcat(newKeywordGen(token.KindIf), newKeywordGen(token.KindExists))),
+		newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
+		newIdGen(),
+	)
+}
+
+type dropTrigger struct {
+	generator
+}
+
+func (dt *dropTrigger) build(gf *genFactory) {
+	dt.generator = newConcat(
+		newKeywordGen(token.KindDrop),
+		newKeywordGen(token.KindTrigger),
 		newOptional(newConcat(newKeywordGen(token.KindIf), newKeywordGen(token.KindExists))),
 		newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
 		newIdGen(),
