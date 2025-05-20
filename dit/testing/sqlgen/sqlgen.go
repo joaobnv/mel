@@ -34,7 +34,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
-			gf.dropTrigger(), gf.pragma(),
+			gf.dropTrigger(), gf.dropView(), gf.pragma(),
 		),
 	)
 }
@@ -43,7 +43,7 @@ type analyze struct {
 	generator
 }
 
-func (a *analyze) build(gf *genFactory) {
+func (a *analyze) build() {
 	a.generator = newConcat(
 		newKeywordGen(token.KindAnalyze),
 		newOptional(
@@ -58,7 +58,7 @@ type begin struct {
 	generator
 }
 
-func (b *begin) build(gf *genFactory) {
+func (b *begin) build() {
 	b.generator = newConcat(
 		newKeywordGen(token.KindBegin),
 		newOr(
@@ -73,7 +73,7 @@ type commit struct {
 	generator
 }
 
-func (c *commit) build(gf *genFactory) {
+func (c *commit) build() {
 	c.generator = newConcat(
 		newOr(newKeywordGen(token.KindCommit), newKeywordGen(token.KindEnd)),
 		newOptional(newKeywordGen(token.KindTransaction)),
@@ -84,7 +84,7 @@ type detach struct {
 	generator
 }
 
-func (d *detach) build(gf *genFactory) {
+func (d *detach) build() {
 	d.generator = newConcat(
 		newKeywordGen(token.KindDetach),
 		newOptional(newKeywordGen(token.KindDatabase)),
@@ -96,7 +96,7 @@ type dropIndex struct {
 	generator
 }
 
-func (di *dropIndex) build(gf *genFactory) {
+func (di *dropIndex) build() {
 	di.generator = newConcat(
 		newKeywordGen(token.KindDrop),
 		newKeywordGen(token.KindIndex),
@@ -110,7 +110,7 @@ type dropTable struct {
 	generator
 }
 
-func (dt *dropTable) build(gf *genFactory) {
+func (dt *dropTable) build() {
 	dt.generator = newConcat(
 		newKeywordGen(token.KindDrop),
 		newKeywordGen(token.KindTable),
@@ -124,10 +124,24 @@ type dropTrigger struct {
 	generator
 }
 
-func (dt *dropTrigger) build(gf *genFactory) {
+func (dt *dropTrigger) build() {
 	dt.generator = newConcat(
 		newKeywordGen(token.KindDrop),
 		newKeywordGen(token.KindTrigger),
+		newOptional(newConcat(newKeywordGen(token.KindIf), newKeywordGen(token.KindExists))),
+		newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
+		newIdGen(),
+	)
+}
+
+type dropView struct {
+	generator
+}
+
+func (dv *dropView) build() {
+	dv.generator = newConcat(
+		newKeywordGen(token.KindDrop),
+		newKeywordGen(token.KindView),
 		newOptional(newConcat(newKeywordGen(token.KindIf), newKeywordGen(token.KindExists))),
 		newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
 		newIdGen(),

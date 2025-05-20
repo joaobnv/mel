@@ -10,6 +10,7 @@ type genFactory struct {
 	di  *dropIndex
 	dt  *dropTable
 	dg  *dropTrigger
+	dv  *dropView
 	pg  *pragma
 	pv  *pragmaValue
 	sn  *signedNumber
@@ -19,14 +20,29 @@ type genFactory struct {
 func newGenFactory() *genFactory {
 	gf := new(genFactory)
 
+	gf.ss = &sqlStmt{}
+	gf.an = &analyze{}
+	gf.bg = &begin{}
+	gf.com = &commit{}
+	gf.de = &detach{}
+	gf.di = &dropIndex{}
+	gf.dt = &dropTable{}
+	gf.dg = &dropTrigger{}
+	gf.dv = &dropView{}
+	gf.pg = &pragma{}
+	gf.pv = &pragmaValue{}
+	gf.sn = &signedNumber{}
+	gf.sl = &signedLiteral{}
+
 	gf.sqlStmt().build(gf)
-	gf.analyze().build(gf)
-	gf.begin().build(gf)
-	gf.commit().build(gf)
-	gf.detach().build(gf)
-	gf.dropIndex().build(gf)
-	gf.dropTable().build(gf)
-	gf.dropTrigger().build(gf)
+	gf.analyze().build()
+	gf.begin().build()
+	gf.commit().build()
+	gf.detach().build()
+	gf.dropIndex().build()
+	gf.dropTable().build()
+	gf.dropTrigger().build()
+	gf.dropView().build()
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -36,85 +52,53 @@ func newGenFactory() *genFactory {
 }
 
 func (gf *genFactory) sqlStmt() *sqlStmt {
-	if gf.ss == nil {
-		gf.ss = &sqlStmt{}
-	}
 	return gf.ss
 }
 
 func (gf *genFactory) analyze() *analyze {
-	if gf.an == nil {
-		gf.an = &analyze{}
-	}
 	return gf.an
 }
 
 func (gf *genFactory) begin() *begin {
-	if gf.bg == nil {
-		gf.bg = &begin{}
-	}
 	return gf.bg
 }
 
 func (gf *genFactory) commit() *commit {
-	if gf.com == nil {
-		gf.com = &commit{}
-	}
 	return gf.com
 }
 
 func (gf *genFactory) detach() *detach {
-	if gf.de == nil {
-		gf.de = &detach{}
-	}
 	return gf.de
 }
 
 func (gf *genFactory) dropIndex() *dropIndex {
-	if gf.di == nil {
-		gf.di = &dropIndex{}
-	}
 	return gf.di
 }
 
 func (gf *genFactory) dropTable() *dropTable {
-	if gf.dt == nil {
-		gf.dt = &dropTable{}
-	}
 	return gf.dt
 }
 
 func (gf *genFactory) dropTrigger() *dropTrigger {
-	if gf.dg == nil {
-		gf.dg = &dropTrigger{}
-	}
 	return gf.dg
 }
 
+func (gf *genFactory) dropView() *dropView {
+	return gf.dv
+}
+
 func (gf *genFactory) pragma() *pragma {
-	if gf.pg == nil {
-		gf.pg = &pragma{}
-	}
 	return gf.pg
 }
 
 func (gf *genFactory) pragmaValue() *pragmaValue {
-	if gf.pv == nil {
-		gf.pv = &pragmaValue{}
-	}
 	return gf.pv
 }
 
 func (gf *genFactory) signedNumber() *signedNumber {
-	if gf.sn == nil {
-		gf.sn = &signedNumber{}
-	}
 	return gf.sn
 }
 
 func (gf *genFactory) signedLiteral() *signedLiteral {
-	if gf.sl == nil {
-		gf.sl = &signedLiteral{}
-	}
 	return gf.sl
 }
