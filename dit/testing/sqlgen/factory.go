@@ -8,6 +8,7 @@ type genFactory struct {
 	com *commit
 	de  *detach
 	di  *dropIndex
+	dt  *dropTable
 	pg  *pragma
 	pv  *pragmaValue
 	sn  *signedNumber
@@ -23,6 +24,7 @@ func newGenFactory() *genFactory {
 	gf.commit().build(gf)
 	gf.detach().build(gf)
 	gf.dropIndex().build(gf)
+	gf.dropTable().build(gf)
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
 	gf.signedNumber().build()
@@ -71,6 +73,13 @@ func (gf *genFactory) dropIndex() *dropIndex {
 		gf.di = &dropIndex{}
 	}
 	return gf.di
+}
+
+func (gf *genFactory) dropTable() *dropTable {
+	if gf.dt == nil {
+		gf.dt = &dropTable{}
+	}
+	return gf.dt
 }
 
 func (gf *genFactory) pragma() *pragma {
