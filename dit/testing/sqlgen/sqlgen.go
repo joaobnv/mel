@@ -34,7 +34,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
-			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(),
+			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(), gf.release(),
 		),
 	)
 }
@@ -176,6 +176,18 @@ func (r *reindex) build() {
 			newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
 			newIdGen(),
 		)),
+	)
+}
+
+type release struct {
+	generator
+}
+
+func (r *release) build() {
+	r.generator = newConcat(
+		newKeywordGen(token.KindRelease),
+		newOptional(newKeywordGen(token.KindSavepoint)),
+		newIdGen(),
 	)
 }
 

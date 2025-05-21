@@ -194,6 +194,11 @@ func TestFirstDifferFromLast(t *testing.T) {
 			firsts: []token.Kind{token.KindReindex, token.KindReindex, token.KindReindex, token.KindReindex},
 			lasts:  []token.Kind{token.KindReindex, token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
 		}, {
+			g:      gf.release(),
+			strs:   []string{"release a", "release savepoint a"},
+			firsts: []token.Kind{token.KindRelease, token.KindRelease},
+			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier},
+		}, {
 			g:      gf.signedLiteral(),
 			pos:    []int{0, 5, 10},
 			strs:   []string{"'a'", "-X'ab'", "+1"},
