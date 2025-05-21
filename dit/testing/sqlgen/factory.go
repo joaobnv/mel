@@ -13,6 +13,7 @@ type genFactory struct {
 	dv  *dropView
 	pg  *pragma
 	pv  *pragmaValue
+	ri  *reindex
 	sn  *signedNumber
 	sl  *signedLiteral
 }
@@ -31,6 +32,7 @@ func newGenFactory() *genFactory {
 	gf.dv = &dropView{}
 	gf.pg = &pragma{}
 	gf.pv = &pragmaValue{}
+	gf.ri = &reindex{}
 	gf.sn = &signedNumber{}
 	gf.sl = &signedLiteral{}
 
@@ -45,6 +47,7 @@ func newGenFactory() *genFactory {
 	gf.dropView().build()
 	gf.pragma().build(gf)
 	gf.pragmaValue().build(gf)
+	gf.reindex().build()
 	gf.signedNumber().build()
 	gf.signedLiteral().build()
 
@@ -93,6 +96,10 @@ func (gf *genFactory) pragma() *pragma {
 
 func (gf *genFactory) pragmaValue() *pragmaValue {
 	return gf.pv
+}
+
+func (gf *genFactory) reindex() *reindex {
+	return gf.ri
 }
 
 func (gf *genFactory) signedNumber() *signedNumber {

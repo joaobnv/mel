@@ -34,7 +34,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
-			gf.dropTrigger(), gf.dropView(), gf.pragma(),
+			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(),
 		),
 	)
 }
@@ -162,6 +162,20 @@ func (p *pragma) build(gf *genFactory) {
 			newConcat(newOperatorGen(token.KindEqual), gf.pragmaValue()),
 			newConcat(newPuctuationGen(token.KindLeftParen), gf.pragmaValue(), newPuctuationGen(token.KindRightParen)),
 		),
+	)
+}
+
+type reindex struct {
+	generator
+}
+
+func (r *reindex) build() {
+	r.generator = newConcat(
+		newKeywordGen(token.KindReindex),
+		newOptional(newConcat(
+			newOptional(newConcat(newSchemaName(), newOperatorGen(token.KindDot))),
+			newIdGen(),
+		)),
 	)
 }
 
