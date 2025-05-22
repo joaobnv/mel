@@ -15,6 +15,7 @@ type genFactory struct {
 	pv  *pragmaValue
 	ri  *reindex
 	rel *release
+	rol *rollback
 	sn  *signedNumber
 	sl  *signedLiteral
 }
@@ -35,6 +36,7 @@ func newGenFactory() *genFactory {
 	gf.pv = &pragmaValue{}
 	gf.ri = &reindex{}
 	gf.rel = &release{}
+	gf.rol = &rollback{}
 	gf.sn = &signedNumber{}
 	gf.sl = &signedLiteral{}
 
@@ -51,6 +53,7 @@ func newGenFactory() *genFactory {
 	gf.pragmaValue().build(gf)
 	gf.reindex().build()
 	gf.release().build()
+	gf.rollback().build()
 	gf.signedNumber().build()
 	gf.signedLiteral().build()
 
@@ -107,6 +110,10 @@ func (gf *genFactory) reindex() *reindex {
 
 func (gf *genFactory) release() *release {
 	return gf.rel
+}
+
+func (gf *genFactory) rollback() *rollback {
+	return gf.rol
 }
 
 func (gf *genFactory) signedNumber() *signedNumber {

@@ -199,6 +199,12 @@ func TestFirstDifferFromLast(t *testing.T) {
 			firsts: []token.Kind{token.KindRelease, token.KindRelease},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier},
 		}, {
+			g:      gf.rollback(),
+			pos:    []int{0, 2, 4},
+			strs:   []string{"rollback", "rollback to savepoint a", "rollback transaction to a"},
+			firsts: []token.Kind{token.KindRollback, token.KindRollback, token.KindRollback},
+			lasts:  []token.Kind{token.KindRollback, token.KindIdentifier, token.KindIdentifier},
+		}, {
 			g:      gf.signedLiteral(),
 			pos:    []int{0, 5, 10},
 			strs:   []string{"'a'", "-X'ab'", "+1"},

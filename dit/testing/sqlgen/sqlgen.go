@@ -34,7 +34,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOptional(newConcat(newKeywordGen(token.KindQuery), newKeywordGen(token.KindPlan))),
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
-			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(), gf.release(),
+			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(), gf.release(), gf.rollback(),
 		),
 	)
 }
@@ -188,6 +188,22 @@ func (r *release) build() {
 		newKeywordGen(token.KindRelease),
 		newOptional(newKeywordGen(token.KindSavepoint)),
 		newIdGen(),
+	)
+}
+
+type rollback struct {
+	generator
+}
+
+func (r *rollback) build() {
+	r.generator = newConcat(
+		newKeywordGen(token.KindRollback),
+		newOptional(newKeywordGen(token.KindTransaction)),
+		newOptional(newConcat(
+			newKeywordGen(token.KindTo),
+			newOptional(newKeywordGen(token.KindSavepoint)),
+			newIdGen(),
+		)),
 	)
 }
 
