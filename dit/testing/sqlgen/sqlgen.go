@@ -35,6 +35,7 @@ func (ss *sqlStmt) build(gf *genFactory) {
 		newOr(
 			gf.analyze(), gf.begin(), gf.commit(), gf.detach(), gf.dropIndex(), gf.dropTable(),
 			gf.dropTrigger(), gf.dropView(), gf.pragma(), gf.reindex(), gf.release(), gf.rollback(),
+			gf.savepoint(),
 		),
 	)
 }
@@ -204,6 +205,17 @@ func (r *rollback) build() {
 			newOptional(newKeywordGen(token.KindSavepoint)),
 			newIdGen(),
 		)),
+	)
+}
+
+type savepoint struct {
+	generator
+}
+
+func (sp *savepoint) build() {
+	sp.generator = newConcat(
+		newKeywordGen(token.KindSavepoint),
+		newIdGen(),
 	)
 }
 

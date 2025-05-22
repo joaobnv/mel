@@ -205,6 +205,11 @@ func TestFirstDifferFromLast(t *testing.T) {
 			firsts: []token.Kind{token.KindRollback, token.KindRollback, token.KindRollback},
 			lasts:  []token.Kind{token.KindRollback, token.KindIdentifier, token.KindIdentifier},
 		}, {
+			g:      gf.savepoint(),
+			strs:   []string{"savepoint a"},
+			firsts: []token.Kind{token.KindSavepoint},
+			lasts:  []token.Kind{token.KindIdentifier},
+		}, {
 			g:      gf.signedLiteral(),
 			pos:    []int{0, 5, 10},
 			strs:   []string{"'a'", "-X'ab'", "+1"},
