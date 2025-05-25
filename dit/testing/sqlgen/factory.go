@@ -17,6 +17,17 @@ type genFactory struct {
 	rel *release
 	rol *rollback
 	sp  *savepoint
+	vac *vacuum
+	exp *expression
+	el  *expressionList
+	fnc *functionCall
+	fa  *functionArguments
+	ot  *orderingTerm
+	otl *orderingTermList
+	fc  *filterClause
+	oc  *overClause
+	fs  *frameSpec
+	tn  *typeName
 	sn  *signedNumber
 	sl  *signedLiteral
 }
@@ -39,6 +50,17 @@ func newGenFactory() *genFactory {
 	gf.rel = &release{}
 	gf.rol = &rollback{}
 	gf.sp = &savepoint{}
+	gf.vac = &vacuum{}
+	gf.exp = &expression{}
+	gf.el = &expressionList{}
+	gf.fnc = &functionCall{}
+	gf.fa = &functionArguments{}
+	gf.ot = &orderingTerm{}
+	gf.otl = &orderingTermList{}
+	gf.fc = &filterClause{}
+	gf.oc = &overClause{}
+	gf.fs = &frameSpec{}
+	gf.tn = &typeName{}
 	gf.sn = &signedNumber{}
 	gf.sl = &signedLiteral{}
 
@@ -57,6 +79,17 @@ func newGenFactory() *genFactory {
 	gf.release().build()
 	gf.rollback().build()
 	gf.savepoint().build()
+	gf.vacuum().build(gf)
+	gf.expression().build(gf)
+	gf.expressionList().build(gf)
+	gf.functionCall().build(gf)
+	gf.functionArguments().build(gf)
+	gf.orderingTerm().build(gf)
+	gf.orderingTermList().build(gf)
+	gf.filterClause().build(gf)
+	gf.overClause().build(gf)
+	gf.frameSpec().build(gf)
+	gf.typeName().build(gf)
 	gf.signedNumber().build()
 	gf.signedLiteral().build()
 
@@ -121,6 +154,50 @@ func (gf *genFactory) rollback() *rollback {
 
 func (gf *genFactory) savepoint() *savepoint {
 	return gf.sp
+}
+
+func (gf *genFactory) vacuum() *vacuum {
+	return gf.vac
+}
+
+func (gf *genFactory) expression() *expression {
+	return gf.exp
+}
+
+func (gf *genFactory) expressionList() *expressionList {
+	return gf.el
+}
+
+func (gf *genFactory) functionCall() *functionCall {
+	return gf.fnc
+}
+
+func (gf *genFactory) functionArguments() *functionArguments {
+	return gf.fa
+}
+
+func (gf *genFactory) orderingTerm() *orderingTerm {
+	return gf.ot
+}
+
+func (gf *genFactory) orderingTermList() *orderingTermList {
+	return gf.otl
+}
+
+func (gf *genFactory) filterClause() *filterClause {
+	return gf.fc
+}
+
+func (gf *genFactory) overClause() *overClause {
+	return gf.oc
+}
+
+func (gf *genFactory) frameSpec() *frameSpec {
+	return gf.fs
+}
+
+func (gf *genFactory) typeName() *typeName {
+	return gf.tn
 }
 
 func (gf *genFactory) signedNumber() *signedNumber {
