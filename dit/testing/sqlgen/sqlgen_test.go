@@ -1,10 +1,12 @@
 package sqlgen
 
 import (
+	"fmt"
 	"iter"
 	"math/rand/v2"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/joaobnv/mel/dit/token"
@@ -21,20 +23,22 @@ func TestSyntax(t *testing.T) {
 }
 
 func TestConcat0(t *testing.T) {
-	g := newConcat()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 1)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	g := *s.conc()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 1)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 2,
 	}
-	for str := range g.gen(nil, cfg) {
+	for str := range g.gen(nil, cfg, s) {
 		t.Errorf("concat generated %q", str)
 	}
 }
 
 type testCase2 struct {
-	cfg    *Config
-	g      generator
+	cfg    *SyntaxConfig
+	s      *syntax
+	g      syntaxGenerator
 	pos    []int
 	strs   []string
 	firsts []token.Kind
@@ -42,7 +46,7 @@ type testCase2 struct {
 }
 
 func (tc2 *testCase2) run(t *testing.T) {
-	next, stop := iter.Pull(tc2.g.gen(nil, tc2.cfg))
+	next, stop := iter.Pull(tc2.g.gen(nil, tc2.cfg, tc2.s))
 	defer stop()
 
 	slices.Sort(tc2.pos)
@@ -96,14 +100,15 @@ func (tc2 *testCase2) run(t *testing.T) {
 }
 
 type testCase struct {
-	cfg   *Config
-	g     generator
+	cfg   *SyntaxConfig
+	s     *syntax
+	g     syntaxGenerator
 	strs  []string
 	kinds []token.Kind
 }
 
 func (tc *testCase) run(t *testing.T) {
-	next, stop := iter.Pull(tc.g.gen(nil, tc.cfg))
+	next, stop := iter.Pull(tc.g.gen(nil, tc.cfg, tc.s))
 	defer stop()
 
 	for i, want := range tc.strs {
@@ -133,16 +138,17 @@ func (tc *testCase) run(t *testing.T) {
 }
 
 func TestSqlStmt(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.sqlStmt(),
+			s:      s,
+			g:      *s.sqlStmt(),
 			strs:   []string{"explain end", "explain end transaction", "explain commit"},
 			firsts: []token.Kind{token.KindExplain, token.KindExplain, token.KindExplain},
 			lasts:  []token.Kind{token.KindEnd, token.KindTransaction, token.KindCommit},
@@ -157,16 +163,17 @@ func TestSqlStmt(t *testing.T) {
 }
 
 func TestAnalyze(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.analyze(),
+			s:      s,
+			g:      *s.analyze(),
 			strs:   []string{"analyze a", "analyze temp", "analyze"},
 			firsts: []token.Kind{token.KindAnalyze, token.KindAnalyze, token.KindAnalyze},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindTemp, token.KindAnalyze},
@@ -181,16 +188,17 @@ func TestAnalyze(t *testing.T) {
 }
 
 func TestBegin(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     gf.begin(),
+			s:     s,
+			g:     *s.begin(),
 			strs:  []string{"begin"},
 			kinds: []token.Kind{token.KindBegin},
 		},
@@ -204,16 +212,17 @@ func TestBegin(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.commit(),
+			s:      s,
+			g:      *s.commit(),
 			strs:   []string{"end", "end transaction", "commit"},
 			firsts: []token.Kind{token.KindEnd, token.KindEnd, token.KindCommit},
 			lasts:  []token.Kind{token.KindEnd, token.KindTransaction, token.KindCommit},
@@ -228,16 +237,17 @@ func TestCommit(t *testing.T) {
 }
 
 func TestDetach(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.detach(),
+			s:      s,
+			g:      *s.detach(),
 			strs:   []string{"detach database a", "detach database temp", "detach a"},
 			firsts: []token.Kind{token.KindDetach, token.KindDetach, token.KindDetach},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindTemp, token.KindIdentifier},
@@ -252,16 +262,17 @@ func TestDetach(t *testing.T) {
 }
 
 func TestDropIndex(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.dropIndex(),
+			s:      s,
+			g:      *s.dropIndex(),
 			strs:   []string{"drop index if exists a", "drop index if exists a.a", "drop index a"},
 			firsts: []token.Kind{token.KindDrop, token.KindDrop, token.KindDrop},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
@@ -276,16 +287,17 @@ func TestDropIndex(t *testing.T) {
 }
 
 func TestDropTable(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.dropTable(),
+			s:      s,
+			g:      *s.dropTable(),
 			strs:   []string{"drop table if exists a", "drop table if exists a.a", "drop table a"},
 			firsts: []token.Kind{token.KindDrop, token.KindDrop, token.KindDrop},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
@@ -300,16 +312,17 @@ func TestDropTable(t *testing.T) {
 }
 
 func TestDropTrigger(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.dropTrigger(),
+			s:      s,
+			g:      *s.dropTrigger(),
 			strs:   []string{"drop trigger if exists a", "drop trigger if exists a.a", "drop trigger a"},
 			firsts: []token.Kind{token.KindDrop, token.KindDrop, token.KindDrop},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
@@ -324,16 +337,17 @@ func TestDropTrigger(t *testing.T) {
 }
 
 func TestDropView(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.dropView(),
+			s:      s,
+			g:      *s.dropView(),
 			strs:   []string{"drop view if exists a", "drop view if exists a.a", "drop view a"},
 			firsts: []token.Kind{token.KindDrop, token.KindDrop, token.KindDrop},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
@@ -348,16 +362,17 @@ func TestDropView(t *testing.T) {
 }
 
 func TestPragma(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.pragma(),
+			s:      s,
+			g:      *s.pragma(),
 			strs:   []string{"pragma a.a(+1)", "pragma a.a(+1.5)", "pragma a.a(+1.5)"},
 			firsts: []token.Kind{token.KindPragma, token.KindPragma, token.KindPragma},
 			lasts:  []token.Kind{token.KindRightParen, token.KindRightParen, token.KindRightParen},
@@ -372,16 +387,17 @@ func TestPragma(t *testing.T) {
 }
 
 func TestPragmaValue(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     gf.pragmaValue(),
+			s:     s,
+			g:     *s.pragmaValue(),
 			strs:  []string{"'a'", "1", "1.5"},
 			kinds: []token.Kind{token.KindString, token.KindNumeric, token.KindNumeric},
 		},
@@ -395,16 +411,17 @@ func TestPragmaValue(t *testing.T) {
 }
 
 func TestReindex(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.reindex(),
+			s:      s,
+			g:      *s.reindex(),
 			strs:   []string{"reindex a", "reindex a.a", "reindex"},
 			firsts: []token.Kind{token.KindReindex, token.KindReindex, token.KindReindex},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindReindex},
@@ -419,16 +436,17 @@ func TestReindex(t *testing.T) {
 }
 
 func TestRelease(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.release(),
+			s:      s,
+			g:      *s.release(),
 			strs:   []string{"release savepoint a", "release a"},
 			firsts: []token.Kind{token.KindRelease, token.KindRelease},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier},
@@ -443,16 +461,17 @@ func TestRelease(t *testing.T) {
 }
 
 func TestRollback(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.rollback(),
+			s:      s,
+			g:      *s.rollback(),
 			strs:   []string{"rollback transaction", "rollback transaction to a", "rollback"},
 			firsts: []token.Kind{token.KindRollback, token.KindRollback, token.KindRollback},
 			lasts:  []token.Kind{token.KindTransaction, token.KindIdentifier, token.KindRollback},
@@ -467,16 +486,17 @@ func TestRollback(t *testing.T) {
 }
 
 func TestSavepoint(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.savepoint(),
+			s:      s,
+			g:      *s.savepoint(),
 			strs:   []string{"savepoint a"},
 			firsts: []token.Kind{token.KindSavepoint},
 			lasts:  []token.Kind{token.KindIdentifier},
@@ -490,17 +510,378 @@ func TestSavepoint(t *testing.T) {
 	}
 }
 
-func TestVacuum(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+func TestSelectStatement(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(5, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.vacuum(),
+			s:      s,
+			g:      *s.selectStatement(),
+			strs:   []string{"with recursive a as(values(raise(ignore))) select all a.*window a as(a) order by(exists()) asc"},
+			firsts: []token.Kind{token.KindWith},
+			lasts:  []token.Kind{token.KindAsc},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestCommonTableExpression(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(2, 50)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 1,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.commonTableExpression(),
+			strs:   []string{"a(a) as materialized(values(raise(ignore)))"},
+			firsts: []token.Kind{token.KindIdentifier},
+			lasts:  []token.Kind{token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestCompoundOperator(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(2, 50)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 1,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.compoundOperator(),
+			strs:   []string{"union all"},
+			firsts: []token.Kind{token.KindUnion},
+			lasts:  []token.Kind{token.KindAll},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestSelectCore(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(2, 50)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 1,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.selectCore(),
+			strs:   []string{"values('a' regexp a())"},
+			firsts: []token.Kind{token.KindValues},
+			lasts:  []token.Kind{token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestResultColumnList(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.resultColumnList(),
+			strs:   []string{"*"},
+			firsts: []token.Kind{token.KindAsterisk},
+			lasts:  []token.Kind{token.KindAsterisk},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestResultColumn(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.resultColumn(),
+			strs:   []string{"*"},
+			firsts: []token.Kind{token.KindAsterisk},
+			lasts:  []token.Kind{token.KindAsterisk},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestTableOrSubqueryList(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(5, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 1,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.tableOrSubqueryList(),
+			strs:   []string{"(temp.a)"},
+			firsts: []token.Kind{token.KindLeftParen},
+			lasts:  []token.Kind{token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestTableOrSubquery(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(5, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.tableOrSubquery(),
+			strs:   []string{"(temp.a)", "(temp.a not indexed)"},
+			firsts: []token.Kind{token.KindLeftParen, token.KindLeftParen},
+			lasts:  []token.Kind{token.KindRightParen, token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestJoinClause(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(5, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.joinClause(),
+			strs:   []string{"(temp.a)"},
+			firsts: []token.Kind{token.KindLeftParen},
+			lasts:  []token.Kind{token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestJoinOperator(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 1)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.joinOperator(),
+			strs:   []string{"inner natural join", "inner outer join", "inner outer left join"},
+			firsts: []token.Kind{token.KindInner, token.KindInner, token.KindInner},
+			lasts:  []token.Kind{token.KindJoin, token.KindJoin, token.KindJoin},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestJoinConstraint(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 2)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.joinConstraint(),
+			strs:   []string{"on ?1", "using(a)", "using(a, a)"},
+			firsts: []token.Kind{token.KindOn, token.KindUsing, token.KindUsing},
+			lasts:  []token.Kind{token.KindQuestionVariable, token.KindRightParen, token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestWindowDeclarationList(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 2)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 2,
+	}
+	cases := []testCase2{
+		{
+			cfg: cfg,
+			s:   s,
+			g:   *s.windowDeclarationList(),
+			strs: []string{
+				"a as(rows between unbounded preceding and() preceding)",
+			},
+			firsts: []token.Kind{token.KindIdentifier},
+			lasts:  []token.Kind{token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestWindowDeclaration(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 1)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 3,
+	}
+	cases := []testCase2{
+		{
+			cfg: cfg,
+			s:   s,
+			g:   *s.windowDeclaration(),
+			strs: []string{
+				"a as(a partition by a.a collate a)",
+				"a as(a partition by a.a collate a groups current row)",
+				"a as(a partition by a.a collate a groups current row exclude group)",
+			},
+			firsts: []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
+			lasts:  []token.Kind{token.KindRightParen, token.KindRightParen, token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestWindowDefinition(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 1)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 3,
+	}
+	cases := []testCase2{
+		{
+			cfg: cfg,
+			s:   s,
+			g:   *s.windowDefinition(),
+			strs: []string{
+				"(a partition by a.a collate a)",
+				"(a partition by a.a collate a groups current row)",
+				"(a partition by a.a collate a groups current row exclude group)",
+			},
+			firsts: []token.Kind{token.KindLeftParen, token.KindLeftParen, token.KindLeftParen},
+			lasts:  []token.Kind{token.KindRightParen, token.KindRightParen, token.KindRightParen},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestVacuum(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
+		PossibilitiesLimit: 1,
+	}
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			s:      s,
+			g:      *s.vacuum(),
 			strs:   []string{"vacuum a"},
 			firsts: []token.Kind{token.KindVacuum},
 			lasts:  []token.Kind{token.KindIdentifier},
@@ -515,16 +896,17 @@ func TestVacuum(t *testing.T) {
 }
 
 func TestExpression(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.expression(),
+			s:      s,
+			g:      *s.expression(),
 			strs:   []string{"raise(ignore)"},
 			firsts: []token.Kind{token.KindRaise},
 			lasts:  []token.Kind{token.KindRightParen},
@@ -539,15 +921,17 @@ func TestExpression(t *testing.T) {
 }
 
 func TestUnOp(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newUnaryOperator(),
+			s:     s,
+			g:     *s.unaryOper(),
 			strs:  []string{"-", "~", "+"},
 			kinds: []token.Kind{token.KindMinus, token.KindTilde, token.KindPlus},
 		},
@@ -561,15 +945,17 @@ func TestUnOp(t *testing.T) {
 }
 
 func TestBinOp(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newBinaryOperator(),
+			s:     s,
+			g:     *s.binaryOper(),
 			strs:  []string{">=", ">", "<="},
 			kinds: []token.Kind{token.KindGreaterThanOrEqual, token.KindGreaterThan, token.KindLessThanOrEqual},
 		},
@@ -583,16 +969,17 @@ func TestBinOp(t *testing.T) {
 }
 
 func TestFunctionCall(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.functionCall(),
+			s:   s,
+			g:   *s.functionCall(),
 			strs: []string{
 				"a() filter(where :a not null)",
 			},
@@ -609,16 +996,17 @@ func TestFunctionCall(t *testing.T) {
 }
 
 func TestFunctionArguments(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 2)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 2)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.functionArguments(),
+			s:   s,
+			g:   *s.functionArguments(),
 			strs: []string{
 				"*",
 			},
@@ -635,16 +1023,17 @@ func TestFunctionArguments(t *testing.T) {
 }
 
 func TestExpressionList(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.orderingTerm(),
+			s:   s,
+			g:   *s.orderingTerm(),
 			strs: []string{
 				"raise(ignore)",
 			},
@@ -661,16 +1050,17 @@ func TestExpressionList(t *testing.T) {
 }
 
 func TestOrderingTerm(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 2,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.orderingTerm(),
+			s:   s,
+			g:   *s.orderingTerm(),
 			strs: []string{
 				"raise(ignore)",
 				"raise(ignore) asc",
@@ -689,16 +1079,17 @@ func TestOrderingTerm(t *testing.T) {
 }
 
 func TestOrderingTermList(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 1,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.orderingTermList(),
+			s:   s,
+			g:   *s.orderingTermList(),
 			strs: []string{
 				"raise(ignore)",
 				"raise(ignore) desc nulls last, cast(a.a.a as a(+1.5, 1.5)) nulls first",
@@ -717,16 +1108,17 @@ func TestOrderingTermList(t *testing.T) {
 }
 
 func TestFilterClause(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.filterClause(),
+			s:   s,
+			g:   *s.filterClause(),
 			strs: []string{
 				"filter(where raise(ignore))",
 			},
@@ -743,16 +1135,17 @@ func TestFilterClause(t *testing.T) {
 }
 
 func TestOverClause(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 2,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.overClause(),
+			s:   s,
+			g:   *s.overClause(),
 			strs: []string{
 				"over()",
 				"over(groups current row exclude ties)",
@@ -771,16 +1164,17 @@ func TestOverClause(t *testing.T) {
 }
 
 func TestFrameSpec(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 2,
 	}
 	cases := []testCase2{
 		{
 			cfg: cfg,
-			g:   gf.frameSpec(),
+			s:   s,
+			g:   *s.frameSpec(),
 			strs: []string{
 				"groups temp.a.a preceding exclude current row",
 				"groups temp.a.a preceding exclude ties",
@@ -799,16 +1193,17 @@ func TestFrameSpec(t *testing.T) {
 }
 
 func TestTypeName(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(1, 1)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(1, 1)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 2,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.typeName(),
+			s:      s,
+			g:      *s.typeName(),
 			strs:   []string{"a", "a(-1)", "a(-1.5, +1.5)"},
 			firsts: []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
 			lasts:  []token.Kind{token.KindIdentifier, token.KindRightParen, token.KindRightParen},
@@ -823,15 +1218,17 @@ func TestTypeName(t *testing.T) {
 }
 
 func TestSchemaName(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newSchemaName(),
+			s:     s,
+			g:     *s.schemaName(),
 			strs:  []string{"temp", "a"},
 			kinds: []token.Kind{token.KindTemp, token.KindIdentifier},
 		},
@@ -845,16 +1242,17 @@ func TestSchemaName(t *testing.T) {
 }
 
 func TestSignedLiteral(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.signedLiteral(),
+			s:      s,
+			g:      *s.signedLiteral(),
 			strs:   []string{"+1", "+'a'", "+X'ab'"},
 			firsts: []token.Kind{token.KindPlus, token.KindPlus, token.KindPlus},
 			lasts:  []token.Kind{token.KindNumeric, token.KindString, token.KindBlob},
@@ -869,16 +1267,17 @@ func TestSignedLiteral(t *testing.T) {
 }
 
 func TestSignedNumber(t *testing.T) {
-	gf := newGenFactory()
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 3,
 	}
 	cases := []testCase2{
 		{
 			cfg:    cfg,
-			g:      gf.signedNumber(),
+			s:      s,
+			g:      *s.signedNumber(),
 			strs:   []string{"+1", "+1.5"},
 			firsts: []token.Kind{token.KindPlus, token.KindPlus},
 			lasts:  []token.Kind{token.KindNumeric, token.KindNumeric},
@@ -893,15 +1292,17 @@ func TestSignedNumber(t *testing.T) {
 }
 
 func TestId(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newIdGen(),
+			s:     s,
+			g:     *s.id(),
 			strs:  []string{"a"},
 			kinds: []token.Kind{token.KindIdentifier},
 		},
@@ -915,15 +1316,17 @@ func TestId(t *testing.T) {
 }
 
 func TestLiteral(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newLiteral(),
+			s:     s,
+			g:     *s.literal(),
 			strs:  []string{"'a'", "X'ab'", "1.5", "1"},
 			kinds: []token.Kind{token.KindString, token.KindBlob, token.KindNumeric, token.KindNumeric},
 		},
@@ -937,15 +1340,17 @@ func TestLiteral(t *testing.T) {
 }
 
 func TestString(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newStringGen(),
+			s:     s,
+			g:     *s.string(),
 			strs:  []string{"'a'"},
 			kinds: []token.Kind{token.KindString},
 		},
@@ -959,15 +1364,17 @@ func TestString(t *testing.T) {
 }
 
 func TestBlob(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newBlobGen(),
+			s:     s,
+			g:     *s.blob(),
 			strs:  []string{"X'ab'"},
 			kinds: []token.Kind{token.KindBlob},
 		},
@@ -981,15 +1388,17 @@ func TestBlob(t *testing.T) {
 }
 
 func TestInt(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newIntGen(),
+			s:     s,
+			g:     *s.int(),
 			strs:  []string{"1"},
 			kinds: []token.Kind{token.KindNumeric},
 		},
@@ -1003,15 +1412,17 @@ func TestInt(t *testing.T) {
 }
 
 func TestFloat(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newFloatGen(),
+			s:     s,
+			g:     *s.float(),
 			strs:  []string{"1.5"},
 			kinds: []token.Kind{token.KindNumeric},
 		},
@@ -1025,15 +1436,17 @@ func TestFloat(t *testing.T) {
 }
 
 func TestComment(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newCommentGen(),
+			s:     s,
+			g:     *s.comment(),
 			strs:  []string{"/* a */", "-- a\n"},
 			kinds: []token.Kind{token.KindCComment, token.KindSQLComment},
 		},
@@ -1047,15 +1460,17 @@ func TestComment(t *testing.T) {
 }
 
 func TestVariable(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    0,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  0,
 		PossibilitiesLimit: 4,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newVariableGen(),
+			s:     s,
+			g:     *s.variable(),
 			strs:  []string{"$a::a::(a)", "?", "?1"},
 			kinds: []token.Kind{token.KindDollarVariable, token.KindQuestionVariable, token.KindQuestionVariable},
 		},
@@ -1224,15 +1639,16 @@ func TestKeyword(t *testing.T) {
 		{kind: token.KindWithout, want: "without"},
 	}
 
+	s := newSyntax()
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			g := newKeywordGen(c.kind)
-			cfg := &Config{
-				RandSource:         rand.New(rand.NewPCG(1, 1)),
-				MaxTurnsInCycle:    0,
+			g := s.kw(c.kind)
+			cfg := &SyntaxConfig{
+				Rand:               rand.New(rand.NewPCG(1, 1)),
+				TurnsInCycleLimit:  0,
 				PossibilitiesLimit: 2,
 			}
-			strs := slices.Collect(g.gen(nil, cfg))
+			strs := slices.Collect((*g).gen(nil, cfg, s))
 			if len(strs) != 1 {
 				t.Errorf("want %d strings, got %d", 1, len(strs))
 				return
@@ -1240,11 +1656,11 @@ func TestKeyword(t *testing.T) {
 			if c.want != strs[0] {
 				t.Errorf("want %q, got %q", c.want, strs[0])
 			}
-			if *g.firstTokenKind() != c.kind {
-				t.Errorf("firstTokenKind = %s, want %s", *g.firstTokenKind(), c.kind)
+			if *(*g).firstTokenKind() != c.kind {
+				t.Errorf("firstTokenKind = %s, want %s", *(*g).firstTokenKind(), c.kind)
 			}
-			if *g.lastTokenKind() != c.kind {
-				t.Errorf("lastTokenKind = %s, want %s", *g.lastTokenKind(), c.kind)
+			if *(*g).lastTokenKind() != c.kind {
+				t.Errorf("lastTokenKind = %s, want %s", *(*g).lastTokenKind(), c.kind)
 			}
 		})
 	}
@@ -1266,7 +1682,8 @@ func TestInvalidKeyword(t *testing.T) {
 		}
 	}()
 
-	newKeywordGen(token.KindDot)
+	s := newSyntax()
+	s.kw(token.KindDot)
 }
 
 func TestOperator(t *testing.T) {
@@ -1298,15 +1715,16 @@ func TestOperator(t *testing.T) {
 		{kind: token.KindDot, want: "."},
 	}
 
+	s := newSyntax()
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			g := newOperatorGen(c.kind)
-			cfg := &Config{
-				RandSource:         rand.New(rand.NewPCG(1, 1)),
-				MaxTurnsInCycle:    0,
+			g := s.oper(c.kind)
+			cfg := &SyntaxConfig{
+				Rand:               rand.New(rand.NewPCG(1, 1)),
+				TurnsInCycleLimit:  0,
 				PossibilitiesLimit: 2,
 			}
-			strs := slices.Collect(g.gen(nil, cfg))
+			strs := slices.Collect((*g).gen(nil, cfg, s))
 			if len(strs) != 1 {
 				t.Errorf("want %d strings, got %d", 1, len(strs))
 				return
@@ -1314,11 +1732,11 @@ func TestOperator(t *testing.T) {
 			if c.want != strs[0] {
 				t.Errorf("want %q, got %q", c.want, strs[0])
 			}
-			if *g.firstTokenKind() != c.kind {
-				t.Errorf("firstTokenKind = %s, want %s", *g.firstTokenKind(), c.kind)
+			if *(*g).firstTokenKind() != c.kind {
+				t.Errorf("firstTokenKind = %s, want %s", *(*g).firstTokenKind(), c.kind)
 			}
-			if *g.lastTokenKind() != c.kind {
-				t.Errorf("lastTokenKind = %s, want %s", *g.lastTokenKind(), c.kind)
+			if *(*g).lastTokenKind() != c.kind {
+				t.Errorf("lastTokenKind = %s, want %s", *(*g).lastTokenKind(), c.kind)
 			}
 		})
 	}
@@ -1340,7 +1758,8 @@ func TestInvalidOperator(t *testing.T) {
 		}
 	}()
 
-	newOperatorGen(token.KindSelect)
+	s := newSyntax()
+	s.oper(token.KindSelect)
 }
 
 func TestPunctuation(t *testing.T) {
@@ -1354,15 +1773,16 @@ func TestPunctuation(t *testing.T) {
 		{kind: token.KindComma, want: ","},
 	}
 
+	s := newSyntax()
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			g := newPunctuationGen(c.kind)
-			cfg := &Config{
-				RandSource:         rand.New(rand.NewPCG(1, 1)),
-				MaxTurnsInCycle:    0,
+			g := s.punct(c.kind)
+			cfg := &SyntaxConfig{
+				Rand:               rand.New(rand.NewPCG(1, 1)),
+				TurnsInCycleLimit:  0,
 				PossibilitiesLimit: 2,
 			}
-			strs := slices.Collect(g.gen(nil, cfg))
+			strs := slices.Collect((*g).gen(nil, cfg, s))
 			if len(strs) != 1 {
 				t.Errorf("want %d strings, got %d", 1, len(strs))
 				return
@@ -1370,11 +1790,11 @@ func TestPunctuation(t *testing.T) {
 			if c.want != strs[0] {
 				t.Errorf("want %q, got %q", c.want, strs[0])
 			}
-			if *g.firstTokenKind() != c.kind {
-				t.Errorf("firstTokenKind = %s, want %s", *g.firstTokenKind(), c.kind)
+			if *(*g).firstTokenKind() != c.kind {
+				t.Errorf("firstTokenKind = %s, want %s", *(*g).firstTokenKind(), c.kind)
 			}
-			if *g.lastTokenKind() != c.kind {
-				t.Errorf("lastTokenKind = %s, want %s", *g.lastTokenKind(), c.kind)
+			if *(*g).lastTokenKind() != c.kind {
+				t.Errorf("lastTokenKind = %s, want %s", *(*g).lastTokenKind(), c.kind)
 			}
 		})
 	}
@@ -1396,7 +1816,8 @@ func TestInvalidPunctuation(t *testing.T) {
 		}
 	}()
 
-	newPunctuationGen(token.KindSelect)
+	s := newSyntax()
+	s.punct(token.KindSelect)
 }
 
 func TestNeedSpace(t *testing.T) {
@@ -1413,7 +1834,8 @@ func TestNeedSpace(t *testing.T) {
 		{k1: &token.KindComma, k2: &token.KindNumeric, want: true},
 		{k1: &token.KindMinus, k2: &token.KindNumeric, want: false},
 	}
-	concat := newConcat().(*concat)
+	s := newSyntax()
+	concat := (*s.conc()).(*concatSynGen)
 	for _, c := range cases {
 		if got := concat.needSpace(c.k1, c.k2); c.want != got {
 			k1Str := "nil"
@@ -1429,37 +1851,65 @@ func TestNeedSpace(t *testing.T) {
 	}
 }
 
-func TestStar0Break(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    2,
+func TestEpsilon(t *testing.T) {
+	s := newSyntax()
+
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
 		PossibilitiesLimit: 10,
 	}
-	g := newStar(newIdGen())
-	g.gen(nil, cfg)(func(str string) bool {
+
+	cases := []testCase2{
+		{
+			cfg:    cfg,
+			g:      *s.eps(),
+			strs:   []string{""},
+			firsts: []token.Kind{nil},
+			lasts:  []token.Kind{nil},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
+	}
+}
+
+func TestStar0Break(t *testing.T) {
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
+		PossibilitiesLimit: 10,
+	}
+	s := newSyntax()
+	g := s.star(s.id())
+	(*g).gen(nil, cfg, s)(func(str string) bool {
 		if str != "" {
 			t.Errorf("want str = %q, got %q", "", str)
 		}
-		if g.firstTokenKind() != nil {
-			t.Errorf("want firstTokenKind = nil, got %s", *g.firstTokenKind())
+		if (*g).firstTokenKind() != nil {
+			t.Errorf("want firstTokenKind = nil, got %s", *(*g).firstTokenKind())
 		}
-		if g.lastTokenKind() != nil {
-			t.Errorf("want lastTokenKind = nil, got %s", *g.lastTokenKind())
+		if (*g).lastTokenKind() != nil {
+			t.Errorf("want lastTokenKind = nil, got %s", *(*g).lastTokenKind())
 		}
 		return false
 	})
 }
 
 func TestStar(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    2,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
 		PossibilitiesLimit: 10,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newStar(newIdGen()),
+			g:     *s.star(s.id()),
 			strs:  []string{"", "a", "a a", "a a a"},
 			kinds: []token.Kind{nil, token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
 		},
@@ -1473,15 +1923,16 @@ func TestStar(t *testing.T) {
 }
 
 func TestPlus(t *testing.T) {
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    2,
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
 		PossibilitiesLimit: 10,
 	}
 	cases := []testCase{
 		{
 			cfg:   cfg,
-			g:     newPlus(newIdGen()),
+			g:     *s.plus(s.id()),
 			strs:  []string{"a", "a a", "a a a"},
 			kinds: []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
 		},
@@ -1494,34 +1945,26 @@ func TestPlus(t *testing.T) {
 	}
 }
 
-func TestOr(t *testing.T) {
-	gf := newGenFactory()
-
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    2,
+func TestConcat(t *testing.T) {
+	s := newSyntax()
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
 		PossibilitiesLimit: 10,
 	}
-
-	rec := &or{}
-	rec.gs = append(rec.gs, newIdGen(), rec)
-
 	cases := []testCase2{
 		{
-			cfg: cfg,
-			g: newOr(
-				newIdGen(), newKeywordGen(token.KindSelect),
-				newOperatorGen(token.KindEqual), gf.savepoint(),
-			),
-			strs:   []string{"a", "select", "savepoint a"},
-			firsts: []token.Kind{token.KindIdentifier, token.KindSelect, token.KindSavepoint},
-			lasts:  []token.Kind{token.KindIdentifier, token.KindSelect, token.KindIdentifier},
+			cfg:    cfg,
+			g:      *s.conc(s.eps(), s.id()),
+			strs:   []string{"a"},
+			firsts: []token.Kind{token.KindIdentifier},
+			lasts:  []token.Kind{token.KindIdentifier},
 		}, {
 			cfg:    cfg,
-			g:      rec,
-			strs:   []string{"a", "a", "a"},
-			firsts: []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
-			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier, token.KindIdentifier},
+			g:      *s.conc(s.id(), s.eps()),
+			strs:   []string{"a"},
+			firsts: []token.Kind{token.KindIdentifier},
+			lasts:  []token.Kind{token.KindIdentifier},
 		},
 	}
 
@@ -1532,46 +1975,55 @@ func TestOr(t *testing.T) {
 	}
 }
 
-func TestOrInvalidGrammar(t *testing.T) {
-	defer func() {
-		value := recover()
-		if value == nil {
-			t.Fatal("not panicked")
-		}
-		err, ok := value.(error)
-		if !ok {
-			t.Fatalf("panic value of type %T, want type error", value)
-		}
-		wantMsg := "invalid grammar: or didn't generate anything"
-		if err.Error() != wantMsg {
-			t.Fatalf("got %q, want %q", err.Error(), wantMsg)
-		}
-	}()
+func TestOr(t *testing.T) {
+	s := newSyntax()
 
-	g := &or{}
-	g.gs = append(g.gs, g)
-
-	cfg := &Config{
-		RandSource:         rand.New(rand.NewPCG(0, 0)),
-		MaxTurnsInCycle:    2,
+	cfg := &SyntaxConfig{
+		Rand:               rand.New(rand.NewPCG(0, 0)),
+		TurnsInCycleLimit:  2,
 		PossibilitiesLimit: 10,
 	}
 
-	for range g.gen(nil, cfg) {
+	var rec syntaxGenerator = &orSynGen{}
+	rec.(*orSynGen).gs = append(rec.(*orSynGen).gs, s.id(), &rec)
+
+	cases := []testCase2{
+		{
+			cfg: cfg,
+			g: *s.or(
+				s.id(), s.kw(token.KindSelect),
+				s.oper(token.KindEqual), s.savepoint(),
+			),
+			strs:   []string{"a", "=", "savepoint a"},
+			firsts: []token.Kind{token.KindIdentifier, token.KindEqual, token.KindSavepoint},
+			lasts:  []token.Kind{token.KindIdentifier, token.KindEqual, token.KindIdentifier},
+		}, {
+			cfg:    cfg,
+			g:      rec,
+			strs:   []string{"a", "a"},
+			firsts: []token.Kind{token.KindIdentifier, token.KindIdentifier},
+			lasts:  []token.Kind{token.KindIdentifier, token.KindIdentifier},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			c.run(t)
+		})
 	}
 }
 
 func TestCount(t *testing.T) {
-	gf := newGenFactory()
+	s := newSyntax()
 	cases := []struct {
-		s     []generator
-		e     generator
+		s     []*syntaxGenerator
+		e     *syntaxGenerator
 		count int
 	}{
-		{e: gf.expression()},
-		{s: []generator{gf.expression()}, e: gf.expression(), count: 1},
-		{s: []generator{gf.typeName(), gf.expression()}, e: gf.typeName(), count: 1},
-		{s: []generator{gf.expression(), gf.expression()}, e: gf.expression(), count: 2},
+		{e: s.expression()},
+		{s: []*syntaxGenerator{s.expression()}, e: s.expression(), count: 1},
+		{s: []*syntaxGenerator{s.typeName(), s.expression()}, e: s.typeName(), count: 1},
+		{s: []*syntaxGenerator{s.expression(), s.expression()}, e: s.expression(), count: 2},
 	}
 
 	for i, c := range cases {
@@ -1581,5 +2033,39 @@ func TestCount(t *testing.T) {
 				t.Errorf("got %d, want %d", got, c.count)
 			}
 		})
+	}
+}
+
+func TestPrintStack(t *testing.T) {
+	s := newSyntax()
+	var stack []*syntaxGenerator
+
+	stack = append(stack,
+		s.sqlStmt(), s.analyze(), s.begin(), s.commit(), s.detach(), s.dropIndex(), s.dropTable(),
+		s.dropTrigger(), s.dropView(), s.pragma(), s.pragmaValue(), s.reindex(), s.release(),
+		s.rollback(), s.savepoint(), s.selectStatement(), s.selectCore(), s.commonTableExpression(),
+		s.compoundOperator(), s.resultColumnList(), s.resultColumn(), s.tableOrSubqueryList(), s.tableOrSubquery(),
+		s.joinClause(), s.joinOperator(), s.joinConstraint(), s.windowDeclarationList(), s.windowDeclaration(),
+		s.windowDefinition(), s.vacuum(), s.expression(), s.expressionList(), s.functionCall(), s.functionArguments(),
+		s.orderingTerm(), s.orderingTermList(), s.filterClause(), s.overClause(), s.frameSpec(), s.typeName(),
+		s.signedNumber(), s.signedLiteral(), s.eps(),
+	)
+	var want strings.Builder
+	for _, str := range []string{
+		"sqlStmt", "analyze", "begin", "commit", "detach", "dropIndex", "dropTable", "dropTrigger", "dropView", "pragma",
+		"pragmaValue", "reindex", "release", "rollback", "savepoint", "selectStatement", "selectCore", "commonTableExpression",
+		"compoundOperator", "resultColumnList", "resultColumn", "tableOrSubqueryList", "tableOrSubquery", "joinClause",
+		"joinOperator", "joinConstraint", "windowDeclarationList", "windowDeclaration", "windowDefinition", "vacuum",
+		"expression", "expressionList", "functionCall", "functionArguments", "orderingTerm", "orderingTermList", "filterClause",
+		"overClause", "frameSpec", "typeName", "signedNumber", "signedLiteral", "...",
+	} {
+		fmt.Fprintln(&want, str)
+	}
+
+	var b strings.Builder
+	s.printStack(&b, stack)
+
+	if b.String() != want.String() {
+		t.Errorf("want %q, got %q", want.String(), b.String())
 	}
 }
