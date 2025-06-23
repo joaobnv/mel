@@ -12,9 +12,11 @@ import (
 	"github.com/joaobnv/mel/dit/token"
 )
 
+// TODO: use runTest in more tests.
+
 func TestSyntax(t *testing.T) {
 	for str := range Syntax() {
-		want := "explain end"
+		want := "vacuum"
 		if str != want {
 			t.Errorf("got %q, want %q", str, want)
 		}
@@ -185,6 +187,16 @@ func TestAnalyze(t *testing.T) {
 			c.run(t)
 		})
 	}
+}
+
+func TestAttach(t *testing.T) {
+	runTest(t, (*syntax).attach,
+		"attach 'a'as temp", "Attach Temp",
+		"attach 'a'as a", "Attach Identifier",
+		"attach database raise(ignore) as temp", "Attach Temp",
+		"attach database raise(ignore) as a", "Attach Identifier",
+		"attach @a as temp", "Attach Temp",
+	)
 }
 
 func TestBegin(t *testing.T) {
@@ -2068,4 +2080,278 @@ func TestPrintStack(t *testing.T) {
 	if b.String() != want.String() {
 		t.Errorf("want %q, got %q", want.String(), b.String())
 	}
+}
+
+func cfg(seed1, seed2 uint64, TurnsInCycleLimit uint8, PossibilitiesLimit uint8) *SyntaxConfig {
+	return &SyntaxConfig{
+		Rand: rand.New(rand.NewPCG(seed1, seed2)), TurnsInCycleLimit: TurnsInCycleLimit, PossibilitiesLimit: PossibilitiesLimit,
+	}
+}
+
+func runTest(t *testing.T, sgFn func(*syntax) *syntaxGenerator, cases ...string) {
+	runTestCfg(t, cfg(0, 0, 1, 2), sgFn, cases...)
+}
+
+func runTestCfg(t *testing.T, cfg *SyntaxConfig, sgFn func(*syntax) *syntaxGenerator, cases ...string) {
+	if len(cases)%2 != 0 {
+		t.Fatal("len(cases) must by even")
+	}
+	s := newSyntax()
+	sg := sgFn(s)
+
+	type generated struct {
+		sql   string
+		first *token.Kind
+		last  *token.Kind
+	}
+
+	var gs []generated
+	var i int
+	for len(gs) < len(cases)/2 {
+		if i > 10 {
+			panic(fmt.Errorf("after 10 attempts we were unable to generate %d strings", len(cases)/2))
+		}
+		i++
+		for s := range (*sg).gen(nil, cfg, s) {
+			gs = append(gs, generated{sql: s, first: (*sg).firstTokenKind(), last: (*sg).lastTokenKind()})
+			if len(gs) == len(cases)/2 {
+				break
+			}
+		}
+	}
+
+	for i := range gs {
+		ci := i * 2
+		if cases[ci] != gs[i].sql {
+			t.Errorf("want %q, got %q", cases[ci], gs[i].sql)
+		}
+
+		parts := strings.Split(cases[ci+1], " ")
+		if len(parts) != 2 {
+			t.Fatal(fmt.Errorf("invalid first/last token kind: %q", cases[ci+1]))
+		}
+		if parts[0] == "nil" {
+			if gs[i].first != nil {
+				t.Errorf("want nil, got %q", (*gs[i].first).String())
+			}
+		} else {
+			first, ok := tokenKinds[parts[0]]
+			if !ok {
+				t.Fatal(fmt.Errorf("invalid token kind: %q", parts[0]))
+			}
+			if *gs[i].first != *first {
+				t.Errorf("want %q, got %q", (*first).String(), (*gs[i].first).String())
+			}
+		}
+
+		if parts[1] == "nil" {
+			if gs[i].last != nil {
+				t.Errorf("want nil, got %q", (*gs[i].last).String())
+			}
+		} else {
+			last, ok := tokenKinds[parts[1]]
+			if !ok {
+				t.Fatal(fmt.Errorf("invalid token kind: %q", parts[1]))
+			}
+			if *gs[i].last != *last {
+				t.Errorf("want %q, got %q", (*last).String(), (*gs[i].last).String())
+			}
+		}
+
+	}
+}
+
+var tokenKinds = map[string]*token.Kind{
+	"Abort":                       &token.KindAbort,
+	"Action":                      &token.KindAction,
+	"Add":                         &token.KindAdd,
+	"After":                       &token.KindAfter,
+	"All":                         &token.KindAll,
+	"Alter":                       &token.KindAlter,
+	"Always":                      &token.KindAlways,
+	"Analyze":                     &token.KindAnalyze,
+	"And":                         &token.KindAnd,
+	"As":                          &token.KindAs,
+	"Asc":                         &token.KindAsc,
+	"Attach":                      &token.KindAttach,
+	"Autoincrement":               &token.KindAutoincrement,
+	"Before":                      &token.KindBefore,
+	"Begin":                       &token.KindBegin,
+	"Between":                     &token.KindBetween,
+	"By":                          &token.KindBy,
+	"Cascade":                     &token.KindCascade,
+	"Case":                        &token.KindCase,
+	"Cast":                        &token.KindCast,
+	"Check":                       &token.KindCheck,
+	"Collate":                     &token.KindCollate,
+	"Column":                      &token.KindColumn,
+	"Commit":                      &token.KindCommit,
+	"Conflict":                    &token.KindConflict,
+	"Constraint":                  &token.KindConstraint,
+	"Create":                      &token.KindCreate,
+	"Cross":                       &token.KindCross,
+	"Current":                     &token.KindCurrent,
+	"CurrentDate":                 &token.KindCurrentDate,
+	"CurrentTime":                 &token.KindCurrentTime,
+	"CurrentTimestamp":            &token.KindCurrentTimestamp,
+	"Database":                    &token.KindDatabase,
+	"Default":                     &token.KindDefault,
+	"Deferrable":                  &token.KindDeferrable,
+	"Deferred":                    &token.KindDeferred,
+	"Delete":                      &token.KindDelete,
+	"Desc":                        &token.KindDesc,
+	"Detach":                      &token.KindDetach,
+	"Distinct":                    &token.KindDistinct,
+	"Do":                          &token.KindDo,
+	"Drop":                        &token.KindDrop,
+	"Each":                        &token.KindEach,
+	"Else":                        &token.KindElse,
+	"End":                         &token.KindEnd,
+	"Escape":                      &token.KindEscape,
+	"Except":                      &token.KindExcept,
+	"Exclude":                     &token.KindExclude,
+	"Exclusive":                   &token.KindExclusive,
+	"Exists":                      &token.KindExists,
+	"Explain":                     &token.KindExplain,
+	"Fail":                        &token.KindFail,
+	"Filter":                      &token.KindFilter,
+	"First":                       &token.KindFirst,
+	"Following":                   &token.KindFollowing,
+	"For":                         &token.KindFor,
+	"Foreign":                     &token.KindForeign,
+	"From":                        &token.KindFrom,
+	"Full":                        &token.KindFull,
+	"Generated":                   &token.KindGenerated,
+	"Glob":                        &token.KindGlob,
+	"Group":                       &token.KindGroup,
+	"Groups":                      &token.KindGroups,
+	"Having":                      &token.KindHaving,
+	"If":                          &token.KindIf,
+	"Ignore":                      &token.KindIgnore,
+	"Immediate":                   &token.KindImmediate,
+	"In":                          &token.KindIn,
+	"Index":                       &token.KindIndex,
+	"Indexed":                     &token.KindIndexed,
+	"Initially":                   &token.KindInitially,
+	"Inner":                       &token.KindInner,
+	"Insert":                      &token.KindInsert,
+	"Instead":                     &token.KindInstead,
+	"Intersect":                   &token.KindIntersect,
+	"Into":                        &token.KindInto,
+	"Is":                          &token.KindIs,
+	"Isnull":                      &token.KindIsnull,
+	"Join":                        &token.KindJoin,
+	"Key":                         &token.KindKey,
+	"Last":                        &token.KindLast,
+	"Left":                        &token.KindLeft,
+	"Like":                        &token.KindLike,
+	"Limit":                       &token.KindLimit,
+	"Match":                       &token.KindMatch,
+	"Materialized":                &token.KindMaterialized,
+	"Natural":                     &token.KindNatural,
+	"No":                          &token.KindNo,
+	"Not":                         &token.KindNot,
+	"Nothing":                     &token.KindNothing,
+	"Notnull":                     &token.KindNotnull,
+	"Null":                        &token.KindNull,
+	"Nulls":                       &token.KindNulls,
+	"Of":                          &token.KindOf,
+	"Offset":                      &token.KindOffset,
+	"On":                          &token.KindOn,
+	"Or":                          &token.KindOr,
+	"Order":                       &token.KindOrder,
+	"Others":                      &token.KindOthers,
+	"Outer":                       &token.KindOuter,
+	"Over":                        &token.KindOver,
+	"Partition":                   &token.KindPartition,
+	"Plan":                        &token.KindPlan,
+	"Pragma":                      &token.KindPragma,
+	"Preceding":                   &token.KindPreceding,
+	"Primary":                     &token.KindPrimary,
+	"Query":                       &token.KindQuery,
+	"Raise":                       &token.KindRaise,
+	"Range":                       &token.KindRange,
+	"Recursive":                   &token.KindRecursive,
+	"References":                  &token.KindReferences,
+	"Regexp":                      &token.KindRegexp,
+	"Reindex":                     &token.KindReindex,
+	"Release":                     &token.KindRelease,
+	"Rename":                      &token.KindRename,
+	"Replace":                     &token.KindReplace,
+	"Restrict":                    &token.KindRestrict,
+	"Returning":                   &token.KindReturning,
+	"Right":                       &token.KindRight,
+	"Rollback":                    &token.KindRollback,
+	"Row":                         &token.KindRow,
+	"RowId":                       &token.KindRowId,
+	"Rows":                        &token.KindRows,
+	"Savepoint":                   &token.KindSavepoint,
+	"Select":                      &token.KindSelect,
+	"Set":                         &token.KindSet,
+	"Stored":                      &token.KindStored,
+	"Strict":                      &token.KindStrict,
+	"Table":                       &token.KindTable,
+	"Temp":                        &token.KindTemp,
+	"Temporary":                   &token.KindTemporary,
+	"Then":                        &token.KindThen,
+	"Ties":                        &token.KindTies,
+	"To":                          &token.KindTo,
+	"Transaction":                 &token.KindTransaction,
+	"Trigger":                     &token.KindTrigger,
+	"Unbounded":                   &token.KindUnbounded,
+	"Union":                       &token.KindUnion,
+	"Unique":                      &token.KindUnique,
+	"Update":                      &token.KindUpdate,
+	"Using":                       &token.KindUsing,
+	"Vacuum":                      &token.KindVacuum,
+	"Values":                      &token.KindValues,
+	"View":                        &token.KindView,
+	"Virtual":                     &token.KindVirtual,
+	"When":                        &token.KindWhen,
+	"Where":                       &token.KindWhere,
+	"Window":                      &token.KindWindow,
+	"With":                        &token.KindWith,
+	"Without":                     &token.KindWithout,
+	"Identifier":                  &token.KindIdentifier,
+	"String":                      &token.KindString,
+	"Blob":                        &token.KindBlob,
+	"Numeric":                     &token.KindNumeric,
+	"SQLComment":                  &token.KindSQLComment,
+	"CComment":                    &token.KindCComment,
+	"QuestionVariable":            &token.KindQuestionVariable,
+	"ColonVariable":               &token.KindColonVariable,
+	"AtVariable":                  &token.KindAtVariable,
+	"DollarVariable":              &token.KindDollarVariable,
+	"Minus":                       &token.KindMinus,
+	"MinusGreaterThan":            &token.KindMinusGreaterThan,
+	"MinusGreaterThanGreaterThan": &token.KindMinusGreaterThanGreaterThan,
+	"LeftParen":                   &token.KindLeftParen,
+	"RightParen":                  &token.KindRightParen,
+	"Semicolon":                   &token.KindSemicolon,
+	"Plus":                        &token.KindPlus,
+	"Asterisk":                    &token.KindAsterisk,
+	"Slash":                       &token.KindSlash,
+	"Percent":                     &token.KindPercent,
+	"Equal":                       &token.KindEqual,
+	"EqualEqual":                  &token.KindEqualEqual,
+	"LessThanOrEqual":             &token.KindLessThanOrEqual,
+	"LessThanGreaterThan":         &token.KindLessThanGreaterThan,
+	"LessThanLessThan":            &token.KindLessThanLessThan,
+	"LessThan":                    &token.KindLessThan,
+	"GreaterThanEqual":            &token.KindGreaterThanOrEqual,
+	"GreaterThanGreaterThan":      &token.KindGreaterThanGreaterThan,
+	"GreaterThan":                 &token.KindGreaterThan,
+	"ExclamationEqual":            &token.KindExclamationEqual,
+	"Comma":                       &token.KindComma,
+	"Ampersand":                   &token.KindAmpersand,
+	"Tilde":                       &token.KindTilde,
+	"Pipe":                        &token.KindPipe,
+	"PipePipe":                    &token.KindPipePipe,
+	"Dot":                         &token.KindDot,
+	"WhiteSpace":                  &token.KindWhiteSpace,
+	"ErrorUnexpectedEOF":          &token.KindErrorUnexpectedEOF,
+	"ErrorBlobNotHexadecimal":     &token.KindErrorBlobNotHexadecimal,
+	"ErrorInvalidCharacter":       &token.KindErrorInvalidCharacter,
+	"ErrorInvalidCharacterAfter":  &token.KindErrorInvalidCharacterAfter,
+	"EOF":                         &token.KindEOF,
 }

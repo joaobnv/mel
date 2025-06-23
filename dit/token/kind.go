@@ -143,7 +143,7 @@ const (
 	kindSavepoint
 	kindSelect
 	kindSet
-	KindStored
+	kindStored
 	kindStrict
 	kindTable
 	kindTemp
@@ -194,7 +194,7 @@ const (
 	kindLessThanGreaterThan
 	kindLessThanLessThan
 	kindLessThan
-	kindGreaterThanEqual
+	kindGreaterThanOrEqual
 	kindGreaterThanGreaterThan
 	kindGreaterThan
 	kindExclamationEqual
@@ -241,7 +241,7 @@ var kindStrings = []string{
 	"Vacuum", "Values", "View", "Virtual", "When", "Where", "Window", "With", "Without", "Identifier", "String", "Blob", "Numeric", "SQLComment",
 	"CComment", "QuestionVariable", "ColonVariable", "AtVariable", "DollarVariable", "Minus", "MinusGreaterThan", "MinusGreaterThanGreaterThan",
 	"LeftParen", "RightParen", "Semicolon", "Plus", "Asterisk", "Slash", "Percent", "Equal", "EqualEqual", "LessThanOrEqual", "LessThanGreaterThan",
-	"LessThanLessThan", "LessThan", "GreaterThanEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand", "Tilde",
+	"LessThanLessThan", "LessThan", "GreaterThanOrEqual", "GreaterThanGreaterThan", "GreaterThan", "ExclamationEqual", "Comma", "Ampersand", "Tilde",
 	"Pipe", "PipePipe", "Dot", "WhiteSpace", "ErrorUnexpectedEOF", "ErrorBlobNotHexadecimal", "ErrorInvalidCharacter", "ErrorInvalidCharacterAfter", "EOF",
 }
 
@@ -373,6 +373,7 @@ var (
 	KindSavepoint        Kind = kindSavepoint
 	KindSelect           Kind = kindSelect
 	KindSet              Kind = kindSet
+	KindStored           Kind = kindStored
 	KindStrict           Kind = kindStrict
 	KindTable            Kind = kindTable
 	KindTemp             Kind = kindTemp
@@ -408,8 +409,8 @@ var (
 	KindAtVariable                  Kind = kindAtVariable
 	KindDollarVariable              Kind = kindDollarVariable
 	KindMinus                       Kind = kindMinus
-	KindMinusGreaterThan            kind = kindMinusGreaterThan
-	KindMinusGreaterThanGreaterThan kind = kindMinusGreaterThanGreaterThan
+	KindMinusGreaterThan            Kind = kindMinusGreaterThan
+	KindMinusGreaterThanGreaterThan Kind = kindMinusGreaterThanGreaterThan
 	KindLeftParen                   Kind = kindLeftParen
 	KindRightParen                  Kind = kindRightParen
 	KindSemicolon                   Kind = kindSemicolon
@@ -423,7 +424,7 @@ var (
 	KindLessThanGreaterThan         Kind = kindLessThanGreaterThan
 	KindLessThanLessThan            Kind = kindLessThanLessThan
 	KindLessThan                    Kind = kindLessThan
-	KindGreaterThanOrEqual          Kind = kindGreaterThanEqual
+	KindGreaterThanOrEqual          Kind = kindGreaterThanOrEqual
 	KindGreaterThanGreaterThan      Kind = kindGreaterThanGreaterThan
 	KindGreaterThan                 Kind = kindGreaterThan
 	KindExclamationEqual            Kind = kindExclamationEqual

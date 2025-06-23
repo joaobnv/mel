@@ -21,6 +21,7 @@ type syntaxGenerator interface {
 type syntax struct {
 	ss      *syntaxGenerator
 	an      *syntaxGenerator
+	at      *syntaxGenerator
 	bg      *syntaxGenerator
 	com     *syntaxGenerator
 	de      *syntaxGenerator
@@ -72,6 +73,7 @@ func newSyntax() *syntax {
 func (s *syntax) build() {
 	s.ss = new(syntaxGenerator)
 	s.an = new(syntaxGenerator)
+	s.at = new(syntaxGenerator)
 	s.bg = new(syntaxGenerator)
 	s.com = new(syntaxGenerator)
 	s.de = new(syntaxGenerator)
@@ -115,6 +117,7 @@ func (s *syntax) build() {
 
 	s.buildSqlStmt()
 	s.buildAnalyze()
+	s.buildAttach()
 	s.buildBegin()
 	s.buildCommit()
 	s.buildDetach()
@@ -166,7 +169,7 @@ func (s *syntax) buildSqlStmt() {
 		s.opt(s.kw(token.KindExplain)),
 		s.opt(s.conc(s.kw(token.KindQuery), s.kw(token.KindPlan))),
 		s.or(
-			s.analyze(), s.begin(), s.commit(), s.detach(), s.dropIndex(), s.dropTable(),
+			s.analyze(), s.attach(), s.begin(), s.commit(), s.detach(), s.dropIndex(), s.dropTable(),
 			s.dropTrigger(), s.dropView(), s.pragma(), s.reindex(), s.release(), s.rollback(),
 			s.savepoint(), s.vacuum(),
 		),
@@ -185,6 +188,22 @@ func (s *syntax) buildAnalyze() {
 				s.schemaName(),
 				s.opt(s.conc(s.oper(token.KindDot), s.id()))),
 		),
+	)
+}
+
+func (s *syntax) attach() *syntaxGenerator {
+	return s.at
+}
+
+func (s *syntax) buildAttach() {
+	*s.at = *s.conc(
+		s.kw(token.KindAttach),
+		s.opt(
+			s.kw(token.KindDatabase),
+		),
+		s.expression(),
+		s.kw(token.KindAs),
+		s.schemaName(),
 	)
 }
 
@@ -1835,7 +1854,7 @@ func (o *orSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax) i
 			return
 		}
 
-		RHSYieldLimit := cfg.Rand.IntN(int(cfg.PossibilitiesLimit))
+		RHSYieldLimit := cfg.Rand.IntN(int(cfg.PossibilitiesLimit) + 1)
 		var amountRHSYielded int
 
 		perm := cfg.Rand.Perm(len(o.gs))
