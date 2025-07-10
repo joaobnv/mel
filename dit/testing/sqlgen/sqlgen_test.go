@@ -2082,6 +2082,39 @@ func TestPrintStack(t *testing.T) {
 	}
 }
 
+func TestVisitor(t *testing.T) {
+	s := newSyntax()
+	ds := newSynGenDetailedString()
+
+	cases := []struct {
+		g    *syntaxGenerator
+		want string
+	}{
+		{g: s.id(), want: "id"},
+		{g: s.string(), want: "str"},
+		{g: s.blob(), want: "blob"},
+		{g: s.int(), want: "int"},
+		{g: s.float(), want: "float"},
+		{g: s.comment(), want: "comm"},
+		{g: s.variable(), want: "var"},
+		{g: s.kw(token.KindSelect), want: "kw"},
+		{g: s.oper(token.KindDot), want: "op"},
+		{g: s.punct(token.KindLeftParen), want: "punct"},
+		{g: s.eps(), want: "eps"},
+		{g: s.star(s.id()), want: "star(id)"},
+		{g: s.plus(s.blob()), want: "plus(blob)"},
+		{g: s.conc(s.blob(), s.comment(), s.float()), want: "conc(blob, comm, float)"},
+		{g: s.or(s.id(), s.int(), s.variable()), want: "or(id, int, var)"},
+	}
+
+	for _, c := range cases {
+		got := ds.get(*c.g)
+		if c.want != got {
+			t.Errorf("want %q, got %q", c.want, got)
+		}
+	}
+}
+
 func cfg(seed1, seed2 uint64, TurnsInCycleLimit uint8, PossibilitiesLimit uint8) *SyntaxConfig {
 	return &SyntaxConfig{
 		Rand: rand.New(rand.NewPCG(seed1, seed2)), TurnsInCycleLimit: TurnsInCycleLimit, PossibilitiesLimit: PossibilitiesLimit,

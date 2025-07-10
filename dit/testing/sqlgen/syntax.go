@@ -10,12 +10,32 @@ import (
 
 type syntaxGenerator interface {
 	gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax) iter.Seq[string]
+	accept(v synGenVisitor)
 	// firstTokenKind returns the first token kind of the previous string yielded by gen. Whitespace are ignored. The
 	// kind will be nil only if the empty string was yielded.
 	firstTokenKind() *token.Kind
 	// firstTokenKind returns the last token kind of the previous string yielded by gen. Whitespace are ignored. The
 	// kind will be nil only if the empty string was yielded.
 	lastTokenKind() *token.Kind
+}
+
+// synGenVisitor is for visitors. The visitor is responsible for the traversal of the generators.
+type synGenVisitor interface {
+	visitId(isg *idSynGen)
+	visitString(ssg *stringSynGen)
+	visitBlob(bsg *blobSynGen)
+	visitInt(isg *intSynGen)
+	visitFloat(fsg *floatSynGen)
+	visitComment(csg *commentSynGen)
+	visitVariable(vsg *variableSynGen)
+	visitKeyword(ksg *keywordSynGen)
+	visitOperator(osg *operatorSynGen)
+	visitPunctuation(psg *punctuationSynGen)
+	visitEpsilon(esg *epsilonSynGen)
+	visitStar(ssg *starSynGen)
+	visitPlus(psg *plusSynGen)
+	visitConcat(csg *concatSynGen)
+	visitOr(osg *orSynGen)
 }
 
 type syntax struct {
@@ -1079,6 +1099,10 @@ func (ig *idSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax) 
 	}
 }
 
+func (ig *idSynGen) accept(v synGenVisitor) {
+	v.visitId(ig)
+}
+
 func (ig *idSynGen) firstTokenKind() *token.Kind {
 	return &token.KindIdentifier
 }
@@ -1093,6 +1117,10 @@ func (sg *stringSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *synt
 	return func(yield func(string) bool) {
 		yield("'a'")
 	}
+}
+
+func (sg *stringSynGen) accept(v synGenVisitor) {
+	v.visitString(sg)
 }
 
 func (sg *stringSynGen) firstTokenKind() *token.Kind {
@@ -1111,6 +1139,10 @@ func (bg *blobSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax
 	}
 }
 
+func (bg *blobSynGen) accept(v synGenVisitor) {
+	v.visitBlob(bg)
+}
+
 func (bg *blobSynGen) firstTokenKind() *token.Kind {
 	return &token.KindBlob
 }
@@ -1127,6 +1159,10 @@ func (ig *intSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax)
 	}
 }
 
+func (ig *intSynGen) accept(v synGenVisitor) {
+	v.visitInt(ig)
+}
+
 func (ig *intSynGen) firstTokenKind() *token.Kind {
 	return &token.KindNumeric
 }
@@ -1141,6 +1177,10 @@ func (fg *floatSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *synta
 	return func(yield func(string) bool) {
 		yield("1.5")
 	}
+}
+
+func (fg *floatSynGen) accept(v synGenVisitor) {
+	v.visitFloat(fg)
 }
 
 func (fg *floatSynGen) firstTokenKind() *token.Kind {
@@ -1185,6 +1225,10 @@ func (cg *commentSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syn
 	}
 }
 
+func (cg *commentSynGen) accept(v synGenVisitor) {
+	v.visitComment(cg)
+}
+
 //lint:ignore U1000 this function may be used in the future
 func (cg *commentSynGen) firstTokenKind() *token.Kind {
 	return cg.ftk
@@ -1199,6 +1243,8 @@ type variableSynGen struct {
 	ftk *token.Kind
 	ltk *token.Kind
 }
+
+// TODO: make the gen generate random variables, not the predefined in strs.
 
 func (vg *variableSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax) iter.Seq[string] {
 	return func(yield func(string) bool) {
@@ -1227,6 +1273,10 @@ func (vg *variableSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *sy
 	}
 }
 
+func (vg *variableSynGen) accept(v synGenVisitor) {
+	v.visitVariable(vg)
+}
+
 func (vg *variableSynGen) firstTokenKind() *token.Kind {
 	return vg.ltk
 }
@@ -1234,6 +1284,8 @@ func (vg *variableSynGen) firstTokenKind() *token.Kind {
 func (vg *variableSynGen) lastTokenKind() *token.Kind {
 	return vg.ltk
 }
+
+// TODO: the keywords are case insensitive. Treat this.
 
 type keywordSynGen struct {
 	kind token.Kind
@@ -1548,6 +1600,10 @@ func (kg *keywordSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syn
 	}
 }
 
+func (kg *keywordSynGen) accept(v synGenVisitor) {
+	v.visitKeyword(kg)
+}
+
 func (kg *keywordSynGen) firstTokenKind() *token.Kind {
 	return kg.ftk
 }
@@ -1615,6 +1671,10 @@ func (og *operatorSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *sy
 	}
 }
 
+func (og *operatorSynGen) accept(v synGenVisitor) {
+	v.visitOperator(og)
+}
+
 func (og *operatorSynGen) firstTokenKind() *token.Kind {
 	return og.ftk
 }
@@ -1646,6 +1706,10 @@ func (pg *punctuationSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s 
 	}
 }
 
+func (p *punctuationSynGen) accept(v synGenVisitor) {
+	v.visitPunctuation(p)
+}
+
 func (pg *punctuationSynGen) firstTokenKind() *token.Kind {
 	return pg.ltk
 }
@@ -1660,6 +1724,10 @@ func (e *epsilonSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *synt
 	return func(yield func(string) bool) {
 		yield("")
 	}
+}
+
+func (o *epsilonSynGen) accept(v synGenVisitor) {
+	v.visitEpsilon(o)
 }
 
 func (e *epsilonSynGen) firstTokenKind() *token.Kind {
@@ -1708,6 +1776,10 @@ func (sg *starSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax
 	}
 }
 
+func (s *starSynGen) accept(v synGenVisitor) {
+	v.visitStar(s)
+}
+
 func (s *starSynGen) firstTokenKind() *token.Kind {
 	return s.ftk
 }
@@ -1742,6 +1814,10 @@ func (p *plusSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax)
 			}
 		}
 	}
+}
+
+func (p *plusSynGen) accept(v synGenVisitor) {
+	v.visitPlus(p)
 }
 
 func (p *plusSynGen) firstTokenKind() *token.Kind {
@@ -1802,6 +1878,10 @@ func (c *concatSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *synta
 			}
 		}
 	}
+}
+
+func (c *concatSynGen) accept(v synGenVisitor) {
+	v.visitConcat(c)
 }
 
 func (c *concatSynGen) firstTokenKind() *token.Kind {
@@ -1877,6 +1957,10 @@ func (o *orSynGen) gen(stack []*syntaxGenerator, cfg *SyntaxConfig, s *syntax) i
 			}
 		}
 	}
+}
+
+func (o *orSynGen) accept(v synGenVisitor) {
+	v.visitOr(o)
 }
 
 func (o *orSynGen) firstTokenKind() *token.Kind {
