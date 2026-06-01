@@ -46,9 +46,6 @@ func TestSQLStatement(t *testing.T) {
 		`EXPLAIN QUERY PLAN ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
 		`SQLStatement {ExplainQueryPlan {TTT AlterTable {TT TableName AddColumn {TT ColDef {ColName
 			ColConstr {NotNullColumnConstraint{TT}} ColConstr{GeneratedColumnConstraint{T T E{T} T T}} }}}} T}`,
-		`EXPLAIN QUERY ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`,
-		`SQLStatement {ExplainQueryPlan {TT !ErrorMissing AlterTable {TT TableName AddColumn {TT ColDef {ColName
-			ColConstr {NotNullColumnConstraint{TT}} ColConstr{GeneratedColumnConstraint{T T E{T} T T}} }}}} T}`,
 		`ALTER TABLE table_a RENAME TO table_b`,
 		"SQLStatement {AlterTable {TT TableName RenameTo {TT TableName}} T}",
 		`ANALYZE schema_name`,
@@ -123,13 +120,8 @@ func TestSQLStatement(t *testing.T) {
 				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
 		`VACUUM;`, "SQLStatement{Vacuum{T} T}",
-		`DROP`,
-		"SQLStatement{T !ErrorExpecting T}",
 		`SELECT 10 10;`,
 		"SQLStatement {SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} Skipped{T} T}",
-		`WITH cte AS (SELECT 10) `,
-		`SQLStatement{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
-			!ErrorExpecting T}}`,
 	)
 
 	for i, c := range cases {
@@ -148,6 +140,27 @@ func TestSQLStatement(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSyntaxError(t *testing.T) {
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			t.Error("not panicked")
+			return
+		}
+		err, ok := rec.(error)
+		if !ok {
+			t.Errorf("recover value of type %T", rec)
+			return
+		}
+		if err.Error() != errSyntax.Error() {
+			t.Errorf("err.Error() = %q, want %q", err.Error(), errSyntax.Error())
+		}
+	}()
+
+	p := New(lexer.New([]byte("EXPLAIN QUERY SELECT 10")))
+	p.SQLStatement()
 }
 
 func TestAlterTable(t *testing.T) {
@@ -2662,17 +2675,18 @@ func (p *testParser) tree() (t parsetree.Construction) {
 // children parses children trees.
 func (p *testParser) children() (cs []parsetree.Construction) {
 	for {
-		if p.tok.kind == tokenKindIdentifier {
+		switch p.tok.kind {
+		case tokenKindIdentifier:
 			cs = append(cs, p.tree())
-		} else if p.tok.kind == tokenKindError {
+		case tokenKindError:
 			cs = append(cs, parsetree.NewError(p.treeKind(p.tok.lexeme), nil))
 			p.advance()
-		} else if p.tok.kind == tokenKindTokens {
+		case tokenKindTokens:
 			for range p.tok.lexeme {
 				cs = append(cs, parsetree.NewTerminal(parsetree.KindToken, nil))
 			}
 			p.advance()
-		} else {
+		default:
 			return
 		}
 	}

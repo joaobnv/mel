@@ -13,6 +13,10 @@ import (
 	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
 )
 
+var (
+	errSyntax = errors.New("syntax error")
+)
+
 // Parser is a parser for the SQL.
 type Parser struct {
 	// comments contains the comments for the current SQLStatement being parsed.
@@ -51,13 +55,11 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 			p.advance()
 			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
 			p.advance()
-			if p.tok[0].Kind == token.KindPlan {
-				c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-				p.advance()
-			} else {
-				c.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "PLAN"`)))
-				p.skipTo(c, token.KindAlter)
-			}
+
+			p.token(token.KindPlan)
+			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+			p.advance()
+
 			father = c
 			nt.AddChild(c)
 		} else {
@@ -107,23 +109,22 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 	case token.KindDetach:
 		father.AddChild(p.detach())
 	case token.KindDrop:
-		if p.tok[1].Kind == token.KindIndex {
+		p.tokenPos(1, token.KindIndex, token.KindTable, token.KindTrigger, token.KindView)
+		switch p.tok[1].Kind {
+		case token.KindIndex:
 			father.AddChild(p.dropIndex())
-		} else if p.tok[1].Kind == token.KindTable {
+		case token.KindTable:
 			father.AddChild(p.dropTable())
-		} else if p.tok[1].Kind == token.KindTrigger {
+		case token.KindTrigger:
 			father.AddChild(p.dropTrigger())
-		} else if p.tok[1].Kind == token.KindView {
+		case token.KindView:
 			father.AddChild(p.dropView())
-		} else {
-			father.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "INDEX", "TABLE", "TRIGGER", OR "VIEW"`)))
 		}
 	case token.KindInsert, token.KindReplace:
 		father.AddChild(p.insert(nil))
 	case token.KindWith:
 		withClause := p.withClause()
+		p.token(token.KindDelete, token.KindInsert, token.KindReplace, token.KindSelect, token.KindUpdate)
 		switch p.tok[0].Kind {
 		case token.KindDelete:
 			father.AddChild(p.delete(withClause))
@@ -133,9 +134,6 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 			father.AddChild(p.selectStatement(withClause))
 		case token.KindUpdate:
 			father.AddChild(p.update(withClause))
-		default:
-			father.AddChild(withClause)
-			father.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting "DELETE", "INSERT", "SELECT", or "UPDATE"`)))
 		}
 	case token.KindPragma:
 		father.AddChild(p.pragma())
@@ -5067,6 +5065,16 @@ func (p *Parser) vacuum() parsetree.NonTerminal {
 	}
 
 	return nt
+}
+
+func (p *Parser) token(k token.Kind, ks ...token.Kind) {
+	p.tokenPos(0, k, ks...)
+}
+
+func (p *Parser) tokenPos(pos int, k token.Kind, ks ...token.Kind) {
+	if p.tok[pos].Kind != k && !slices.Contains(ks, p.tok[pos].Kind) {
+		panic(errSyntax)
+	}
 }
 
 // advance advances the lexer and put the next comments in p.comments
