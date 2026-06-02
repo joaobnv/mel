@@ -168,116 +168,79 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 // alterTable parses a alter table statement.
 func (p *Parser) alterTable() parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindAlterTable)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
+	nt.AddChild(p.treeToken(token.KindAlter))
+	nt.AddChild(p.treeToken(token.KindTable))
 
-	p.advance()
-	if p.tok[0].Kind != token.KindTable {
-		if !p.skipTo(nt, token.KindTable, token.KindSemicolon) {
-			return nt
-		}
-	}
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-
-	p.advance()
-	if p.tok[0].Kind == token.KindIdentifier && p.tok[1].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-		p.advance()
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	p.token(token.KindIdentifier)
+	if p.tok[1].Kind == token.KindDot {
+		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier))
+		nt.AddChild(p.treeToken(token.KindDot))
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
-		p.advance()
-	} else if slices.Contains([]token.Kind{token.KindRename, token.KindAdd, token.KindDrop}, p.tok[0].Kind) {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New("missing table name")))
-	}
+	nt.AddChild(p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier))
 
-	p.skipTo(nt, token.KindRename, token.KindAdd, token.KindDrop, token.KindSemicolon)
-
-	if p.tok[0].Kind == token.KindRename && p.tok[1].Kind == token.KindTo {
-		rt := parsetree.NewNonTerminal(parsetree.KindRenameTo)
-		rt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-		rt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-		if p.tok[0].Kind == token.KindIdentifier {
-			rt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
-			p.advance()
-		} else {
-			rt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
+	switch p.token(token.KindRename, token.KindAdd, token.KindDrop) {
+	case token.KindRename:
+		switch p.tokenPos(1, token.KindTo, token.KindColumn, token.KindIdentifier) {
+		case token.KindTo:
+			nt.AddChild(p.alterTableRenameTo())
+		default:
+			nt.AddChild(p.alterTableRenameColumn())
 		}
-		nt.AddChild(rt)
-	} else if p.tok[0].Kind == token.KindRename {
-		rc := parsetree.NewNonTerminal(parsetree.KindRenameColumn)
-		rc.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindColumn {
-			rc.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		}
-
-		if p.tok[0].Kind == token.KindIdentifier {
-			rc.AddChild(parsetree.NewTerminal(parsetree.KindColumnName, p.tok[0]))
-			p.advance()
-		} else if p.tok[0].Kind == token.KindTo {
-			rc.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New("missing column name")))
-		}
-
-		p.skipTo(rc, token.KindTo, token.KindIdentifier, token.KindSemicolon)
-
-		if p.tok[0].Kind == token.KindTo {
-			rc.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			rc.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "TO"`)))
-		}
-
-		if p.tok[0].Kind == token.KindIdentifier {
-			rc.AddChild(parsetree.NewTerminal(parsetree.KindColumnName, p.tok[0]))
-			p.advance()
-		} else {
-			rc.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing new column name`)))
-		}
-
-		nt.AddChild(rc)
-	} else if p.tok[0].Kind == token.KindAdd {
-		at := parsetree.NewNonTerminal(parsetree.KindAddColumn)
-		at.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindColumn {
-			at.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		}
-
-		if p.tok[0].Kind == token.KindIdentifier {
-			at.AddChild(p.columnDefinition())
-		} else {
-			at.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing column definition`)))
-		}
-		nt.AddChild(at)
-	} else if p.tok[0].Kind == token.KindDrop {
-		dt := parsetree.NewNonTerminal(parsetree.KindDropColumn)
-		dt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindColumn {
-			dt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		}
-
-		if p.tok[0].Kind == token.KindIdentifier {
-			dt.AddChild(parsetree.NewTerminal(parsetree.KindColumnName, p.tok[0]))
-			p.advance()
-		} else {
-			dt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing column name`)))
-		}
-		nt.AddChild(dt)
+	case token.KindAdd:
+		nt.AddChild(p.alterTableAddColumn())
+	case token.KindDrop:
+		nt.AddChild(p.alterTableDropColumn())
 	}
 
 	return nt
+}
+
+func (p *Parser) alterTableRenameTo() parsetree.NonTerminal {
+	rt := parsetree.NewNonTerminal(parsetree.KindRenameTo)
+	rt.AddChild(p.treeToken(token.KindRename))
+	rt.AddChild(p.treeToken(token.KindTo))
+	rt.AddChild(p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier))
+	return rt
+}
+
+func (p *Parser) alterTableRenameColumn() parsetree.NonTerminal {
+	rc := parsetree.NewNonTerminal(parsetree.KindRenameColumn)
+	rc.AddChild(p.treeToken(token.KindRename))
+
+	if p.is(token.KindColumn) {
+		rc.AddChild(p.treeToken(token.KindColumn))
+	}
+
+	rc.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
+	rc.AddChild(p.treeToken(token.KindTo))
+	rc.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
+	return rc
+}
+
+func (p *Parser) alterTableAddColumn() parsetree.NonTerminal {
+	at := parsetree.NewNonTerminal(parsetree.KindAddColumn)
+	at.AddChild(p.treeToken(token.KindAdd))
+
+	if p.is(token.KindColumn) {
+		at.AddChild(p.treeToken(token.KindColumn))
+	}
+
+	p.token(token.KindIdentifier)
+	at.AddChild(p.columnDefinition())
+	return at
+}
+
+func (p *Parser) alterTableDropColumn() parsetree.NonTerminal {
+	dt := parsetree.NewNonTerminal(parsetree.KindDropColumn)
+	dt.AddChild(p.treeToken(token.KindDrop))
+
+	if p.is(token.KindColumn) {
+		dt.AddChild(p.treeToken(token.KindColumn))
+	}
+
+	dt.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
+	return dt
 }
 
 // columnDefinition parses a column definition.
@@ -5067,14 +5030,34 @@ func (p *Parser) vacuum() parsetree.NonTerminal {
 	return nt
 }
 
-func (p *Parser) token(k token.Kind, ks ...token.Kind) {
-	p.tokenPos(0, k, ks...)
+func (p *Parser) is(k token.Kind) bool {
+	return p.isPos(0, k)
 }
 
-func (p *Parser) tokenPos(pos int, k token.Kind, ks ...token.Kind) {
+func (p *Parser) isPos(pos int, k token.Kind) bool {
+	return p.tok[pos].Kind == k
+}
+
+func (p *Parser) treeToken(tokKind token.Kind) parsetree.Terminal {
+	return p.treeTokenKind(parsetree.KindToken, tokKind)
+}
+
+func (p *Parser) treeTokenKind(treeKind parsetree.Kind, tokKind token.Kind) parsetree.Terminal {
+	p.token(tokKind)
+	t := parsetree.NewTerminal(treeKind, p.tok[0])
+	p.advance()
+	return t
+}
+
+func (p *Parser) token(k token.Kind, ks ...token.Kind) token.Kind {
+	return p.tokenPos(0, k, ks...)
+}
+
+func (p *Parser) tokenPos(pos int, k token.Kind, ks ...token.Kind) token.Kind {
 	if p.tok[pos].Kind != k && !slices.Contains(ks, p.tok[pos].Kind) {
 		panic(errSyntax)
 	}
+	return p.tok[pos].Kind
 }
 
 // advance advances the lexer and put the next comments in p.comments

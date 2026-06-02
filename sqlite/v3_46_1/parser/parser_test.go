@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log"
 	"regexp"
 	"slices"
 	"strconv"
@@ -183,30 +184,6 @@ func TestAlterTable(t *testing.T) {
 		"AlterTable {TT TableName DropColumn {T ColumnName}}",
 		`ALTER TABLE table_a DROP COLUMN column_b`,
 		"AlterTable {TT TableName DropColumn {TT ColumnName}}",
-		`ALTER TABLE RENAME TO table_b`,
-		"AlterTable {TT !ErrorMissing RenameTo {TT TableName}}",
-		`ALTER TABLE schema_a. RENAME TO table_b`,
-		"AlterTable {TT SchemaName T !ErrorMissing RenameTo {TT TableName}}",
-		`ALTER TABLE table_a RENAME TO `,
-		"AlterTable {TT TableName RenameTo {TT !ErrorMissing}}",
-		`ALTER TABLE table_a RENAME column_a TO `,
-		"AlterTable {TT TableName RenameColumn {T ColumnName T !ErrorMissing}}",
-		`ALTER TABLE table_a 10 RENAME column_a TO `,
-		"AlterTable {TT TableName Skipped {T} RenameColumn {T ColumnName T !ErrorMissing}}",
-		`ALTER`,
-		"AlterTable {T !ErrorUnexpectedEOF}",
-		`ALTER TABLE table_a RENAME column_a column_b `,
-		"AlterTable {TT TableName RenameColumn {T ColumnName !ErrorMissing ColumnName}}",
-		`ALTER TABLE table_a RENAME COLUMN TO column_b `,
-		"AlterTable {TT TableName RenameColumn {TT !ErrorMissing T ColumnName}}",
-		`ALTER TABLE table_a ADD COLUMN `,
-		"AlterTable {TT TableName AddColumn {TT !ErrorMissing}}",
-		`ALTER TABLE table_a ADD COLUMN column_a INTEGER()`,
-		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T T !ErrorMissing T}}}}",
-		`ALTER TABLE table_a ADD COLUMN column_a INTEGER 10)`,
-		"AlterTable {TT TableName AddColumn {TT ColumnDefinition {ColumnName TypeName {T !ErrorMissing TT}}}}",
-		`ALTER TABLE table_a DROP COLUMN`,
-		"AlterTable {TT TableName DropColumn {TT !ErrorMissing}}",
 	)
 
 	runTests(t, cases, (*Parser).alterTable)
@@ -2273,6 +2250,7 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
+			log.Println(c.code)
 			p := New(lexer.New([]byte(c.code)))
 			p.comments = make(map[*token.Token][]*token.Token)
 			p.advance()
