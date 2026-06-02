@@ -720,35 +720,14 @@ func (p *Parser) conflictClause() parsetree.NonTerminal {
 // analyze parses a analyze statement.
 func (p *Parser) analyze() parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindAnalyze)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	nt.AddChild(p.treeToken(token.KindAnalyze))
 
-	if p.tok[0].Kind == token.KindIdentifier && p.tok[1].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-		p.advance()
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-		if p.tok[0].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindTableOrIndexName, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
-		}
-	} else if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaIndexOrTableName, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-		if p.tok[0].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindTableOrIndexName, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
-		}
+	if p.is(token.KindIdentifier, token.KindDot) {
+		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier))
+		nt.AddChild(p.treeToken(token.KindDot))
+		nt.AddChild(p.treeTokenKind(parsetree.KindTableOrIndexName, token.KindIdentifier))
 	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing identifier`)))
+		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaIndexOrTableName, token.KindIdentifier))
 	}
 
 	return nt
@@ -5030,8 +5009,16 @@ func (p *Parser) vacuum() parsetree.NonTerminal {
 	return nt
 }
 
-func (p *Parser) is(k token.Kind) bool {
-	return p.isPos(0, k)
+func (p *Parser) is(k token.Kind, ks ...token.Kind) bool {
+	if !p.isPos(0, k) {
+		return false
+	}
+	for i := range ks {
+		if !p.isPos(i+1, ks[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Parser) isPos(pos int, k token.Kind) bool {

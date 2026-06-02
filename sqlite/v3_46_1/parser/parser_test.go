@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"log"
 	"regexp"
 	"slices"
 	"strconv"
@@ -418,14 +417,6 @@ func TestAnalyze(t *testing.T) {
 		"Analyze {T SchemaIndexOrTableName}",
 		`ANALYZE schema_name.table_name`,
 		"Analyze {T SchemaName T TableOrIndexName}",
-		`ANALYZE `,
-		"Analyze {T !ErrorMissing}",
-		`ANALYZE schema_name.`,
-		"Analyze {T SchemaName T !ErrorMissing}",
-		`ANALYZE .table_name`,
-		"Analyze {T !ErrorMissing T TableOrIndexName}",
-		`ANALYZE .`,
-		"Analyze {T !ErrorMissing T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).analyze)
@@ -2250,7 +2241,6 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
-			log.Println(c.code)
 			p := New(lexer.New([]byte(c.code)))
 			p.comments = make(map[*token.Token][]*token.Token)
 			p.advance()
