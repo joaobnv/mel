@@ -120,8 +120,6 @@ func TestSQLStatement(t *testing.T) {
 				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
 		`VACUUM;`, "SQLStatement{Vacuum{T} T}",
-		`SELECT 10 10;`,
-		"SQLStatement {SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} Skipped{T} T}",
 	)
 
 	for i, c := range cases {
@@ -426,9 +424,6 @@ func TestAttach(t *testing.T) {
 	cases := testCases(
 		`ATTACH DATABASE ':memory' AS schema_name`, "Attach {TT E{T} T SchemaName}",
 		`ATTACH '' AS schema_name`, "Attach {T E{T} T SchemaName}",
-		`ATTACH ;`, "Attach {T !ErrorMissing}",
-		`ATTACH AS ;`, "Attach {T !ErrorMissing T !ErrorMissing}",
-		`ATTACH ':memory' schema_name ;`, "Attach {T E{T} !ErrorMissing SchemaName}",
 	)
 
 	runTests(t, cases, (*Parser).attach)

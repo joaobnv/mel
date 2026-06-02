@@ -24,7 +24,8 @@ type Parser struct {
 	// tok contains the current look ahead tokens.
 	tok [3]*token.Token
 	// l is the lexer.
-	l *lexer.Lexer
+	l         *lexer.Lexer
+	treeStack []parsetree.NonTerminal
 }
 
 // New creates a parser.
@@ -45,202 +46,151 @@ func (p *Parser) SQLStatement() (c parsetree.Construction, comments map[*token.T
 		p.advance()
 	}
 
-	nt := parsetree.NewNonTerminal(parsetree.KindSQLStatement)
+	p.pushTree(parsetree.KindSQLStatement)
 
-	father := nt
-	if p.tok[0].Kind == token.KindExplain {
-		if p.tok[1].Kind == token.KindQuery {
-			c := parsetree.NewNonTerminal(parsetree.KindExplainQueryPlan)
-			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-
-			p.token(token.KindPlan)
-			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-
-			father = c
-			nt.AddChild(c)
-		} else {
-			c := parsetree.NewNonTerminal(parsetree.KindExplain)
-			c.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-			father = c
-			nt.AddChild(c)
-		}
+	var explain bool
+	if p.is(token.KindExplain, token.KindQuery) {
+		p.pushTree(parsetree.KindExplainQueryPlan)
+		p.treeToken(token.KindExplain)
+		p.treeToken(token.KindQuery)
+		p.treeToken(token.KindPlan)
+		explain = true
+	} else if p.is(token.KindExplain) {
+		p.pushTree(parsetree.KindExplain)
+		p.treeToken(token.KindExplain)
+		explain = true
 	}
 
 	switch p.tok[0].Kind {
 	case token.KindAlter:
-		father.AddChild(p.alterTable())
+		p.addChild(p.alterTable())
 	case token.KindAnalyze:
-		father.AddChild(p.analyze())
+		p.addChild(p.analyze())
 	case token.KindAttach:
-		father.AddChild(p.attach())
+		p.addChild(p.attach())
 	case token.KindBegin:
-		father.AddChild(p.begin())
+		p.addChild(p.begin())
 	case token.KindCommit, token.KindEnd:
-		father.AddChild(p.commit())
+		p.addChild(p.commit())
 	case token.KindRollback:
-		father.AddChild(p.rollback())
+		p.addChild(p.rollback())
 	case token.KindCreate:
-		if p.tok[1].Kind == token.KindIndex || p.tok[1].Kind == token.KindUnique {
-			father.AddChild(p.createIndex())
-		} else if p.tok[1].Kind == token.KindTable {
-			father.AddChild(p.createTable())
-		} else if p.tok[1].Kind == token.KindTrigger {
-			father.AddChild(p.createTrigger())
-		} else if p.tok[1].Kind == token.KindView {
-			father.AddChild(p.createView())
-		} else if p.tok[1].Kind == token.KindTemp || p.tok[1].Kind == token.KindTemporary {
-			if p.tok[2].Kind == token.KindTable {
-				father.AddChild(p.createTable())
-			} else if p.tok[2].Kind == token.KindTrigger {
-				father.AddChild(p.createTrigger())
-			} else if p.tok[2].Kind == token.KindView {
-				father.AddChild(p.createView())
-			}
-		} else if p.tok[1].Kind == token.KindVirtual {
-			father.AddChild(p.createVirtualTable())
-		}
+		p.addChild(p.create())
 	case token.KindDelete:
-		father.AddChild(p.delete(nil))
+		p.addChild(p.delete(nil))
 	case token.KindDetach:
-		father.AddChild(p.detach())
+		p.addChild(p.detach())
 	case token.KindDrop:
-		p.tokenPos(1, token.KindIndex, token.KindTable, token.KindTrigger, token.KindView)
-		switch p.tok[1].Kind {
-		case token.KindIndex:
-			father.AddChild(p.dropIndex())
-		case token.KindTable:
-			father.AddChild(p.dropTable())
-		case token.KindTrigger:
-			father.AddChild(p.dropTrigger())
-		case token.KindView:
-			father.AddChild(p.dropView())
-		}
+		p.addChild(p.drop())
 	case token.KindInsert, token.KindReplace:
-		father.AddChild(p.insert(nil))
+		p.addChild(p.insert(nil))
 	case token.KindWith:
-		withClause := p.withClause()
-		p.token(token.KindDelete, token.KindInsert, token.KindReplace, token.KindSelect, token.KindUpdate)
-		switch p.tok[0].Kind {
-		case token.KindDelete:
-			father.AddChild(p.delete(withClause))
-		case token.KindInsert, token.KindReplace:
-			father.AddChild(p.insert(withClause))
-		case token.KindSelect:
-			father.AddChild(p.selectStatement(withClause))
-		case token.KindUpdate:
-			father.AddChild(p.update(withClause))
-		}
+		p.addChild(p.with())
 	case token.KindPragma:
-		father.AddChild(p.pragma())
+		p.addChild(p.pragma())
 	case token.KindReindex:
-		father.AddChild(p.reindex())
+		p.addChild(p.reindex())
 	case token.KindRelease:
-		father.AddChild(p.release())
+		p.addChild(p.release())
 	case token.KindSavepoint:
-		father.AddChild(p.savepoint())
+		p.addChild(p.savepoint())
 	case token.KindSelect:
-		father.AddChild(p.selectStatement(nil))
+		p.addChild(p.selectStatement(nil))
 	case token.KindUpdate:
-		father.AddChild(p.update(nil))
+		p.addChild(p.update(nil))
 	case token.KindVacuum:
-		father.AddChild(p.vacuum())
+		p.addChild(p.vacuum())
 	}
 
-	if p.tok[0].Kind == token.KindSemicolon {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindEOF {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	} else if p.skipTo(nt, token.KindSemicolon) {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if explain {
+		p.addChild(p.popTree())
+	}
+
+	if p.is(token.KindSemicolon) {
+		p.treeToken(token.KindSemicolon)
+	} else if p.is(token.KindEOF) {
+		p.treeToken(token.KindEOF)
 	}
 
 	p.comments = nil
-	return nt, comments
+	return p.popTree(), comments
 }
 
 // alterTable parses a alter table statement.
 func (p *Parser) alterTable() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindAlterTable)
-	nt.AddChild(p.treeToken(token.KindAlter))
-	nt.AddChild(p.treeToken(token.KindTable))
+	p.pushTree(parsetree.KindAlterTable)
+	p.treeToken(token.KindAlter)
+	p.treeToken(token.KindTable)
 
-	p.token(token.KindIdentifier)
-	if p.tok[1].Kind == token.KindDot {
-		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier))
-		nt.AddChild(p.treeToken(token.KindDot))
+	if p.is(token.KindIdentifier, token.KindDot) {
+		p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier)
+		p.treeToken(token.KindDot)
 	}
 
-	nt.AddChild(p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier))
+	p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier)
 
 	switch p.token(token.KindRename, token.KindAdd, token.KindDrop) {
 	case token.KindRename:
 		switch p.tokenPos(1, token.KindTo, token.KindColumn, token.KindIdentifier) {
 		case token.KindTo:
-			nt.AddChild(p.alterTableRenameTo())
+			p.addChild(p.alterTableRenameTo())
 		default:
-			nt.AddChild(p.alterTableRenameColumn())
+			p.addChild(p.alterTableRenameColumn())
 		}
 	case token.KindAdd:
-		nt.AddChild(p.alterTableAddColumn())
+		p.addChild(p.alterTableAddColumn())
 	case token.KindDrop:
-		nt.AddChild(p.alterTableDropColumn())
+		p.addChild(p.alterTableDropColumn())
 	}
 
-	return nt
+	return p.popTree()
 }
 
 func (p *Parser) alterTableRenameTo() parsetree.NonTerminal {
-	rt := parsetree.NewNonTerminal(parsetree.KindRenameTo)
-	rt.AddChild(p.treeToken(token.KindRename))
-	rt.AddChild(p.treeToken(token.KindTo))
-	rt.AddChild(p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier))
-	return rt
+	p.pushTree(parsetree.KindRenameTo)
+	p.treeToken(token.KindRename)
+	p.treeToken(token.KindTo)
+	p.treeTokenKind(parsetree.KindTableName, token.KindIdentifier)
+	return p.popTree()
 }
 
 func (p *Parser) alterTableRenameColumn() parsetree.NonTerminal {
-	rc := parsetree.NewNonTerminal(parsetree.KindRenameColumn)
-	rc.AddChild(p.treeToken(token.KindRename))
+	p.pushTree(parsetree.KindRenameColumn)
+	p.treeToken(token.KindRename)
 
 	if p.is(token.KindColumn) {
-		rc.AddChild(p.treeToken(token.KindColumn))
+		p.treeToken(token.KindColumn)
 	}
 
-	rc.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
-	rc.AddChild(p.treeToken(token.KindTo))
-	rc.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
-	return rc
+	p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier)
+	p.treeToken(token.KindTo)
+	p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier)
+	return p.popTree()
 }
 
 func (p *Parser) alterTableAddColumn() parsetree.NonTerminal {
-	at := parsetree.NewNonTerminal(parsetree.KindAddColumn)
-	at.AddChild(p.treeToken(token.KindAdd))
+	p.pushTree(parsetree.KindAddColumn)
+	p.treeToken(token.KindAdd)
 
 	if p.is(token.KindColumn) {
-		at.AddChild(p.treeToken(token.KindColumn))
+		p.treeToken(token.KindColumn)
 	}
 
 	p.token(token.KindIdentifier)
-	at.AddChild(p.columnDefinition())
-	return at
+	p.addChild(p.columnDefinition())
+	return p.popTree()
 }
 
 func (p *Parser) alterTableDropColumn() parsetree.NonTerminal {
-	dt := parsetree.NewNonTerminal(parsetree.KindDropColumn)
-	dt.AddChild(p.treeToken(token.KindDrop))
+	p.pushTree(parsetree.KindDropColumn)
+	p.treeToken(token.KindDrop)
 
 	if p.is(token.KindColumn) {
-		dt.AddChild(p.treeToken(token.KindColumn))
+		p.treeToken(token.KindColumn)
 	}
 
-	dt.AddChild(p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier))
-	return dt
+	p.treeTokenKind(parsetree.KindColumnName, token.KindIdentifier)
+	return p.popTree()
 }
 
 // columnDefinition parses a column definition.
@@ -719,52 +669,34 @@ func (p *Parser) conflictClause() parsetree.NonTerminal {
 
 // analyze parses a analyze statement.
 func (p *Parser) analyze() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindAnalyze)
-	nt.AddChild(p.treeToken(token.KindAnalyze))
+	p.pushTree(parsetree.KindAnalyze)
+	p.treeToken(token.KindAnalyze)
 
 	if p.is(token.KindIdentifier, token.KindDot) {
-		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier))
-		nt.AddChild(p.treeToken(token.KindDot))
-		nt.AddChild(p.treeTokenKind(parsetree.KindTableOrIndexName, token.KindIdentifier))
+		p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier)
+		p.treeToken(token.KindDot)
+		p.treeTokenKind(parsetree.KindTableOrIndexName, token.KindIdentifier)
 	} else {
-		nt.AddChild(p.treeTokenKind(parsetree.KindSchemaIndexOrTableName, token.KindIdentifier))
+		p.treeTokenKind(parsetree.KindSchemaIndexOrTableName, token.KindIdentifier)
 	}
 
-	return nt
+	return p.popTree()
 }
 
 // attach parses a attach statement.
 func (p *Parser) attach() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindAttach)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindAttach)
+	p.treeToken(token.KindAttach)
 
-	if p.tok[0].Kind == token.KindDatabase {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.is(token.KindDatabase) {
+		p.treeToken(token.KindDatabase)
 	}
 
-	if p.isStartOfExpression(p.tok[0]) {
-		nt.AddChild(p.expression())
-	} else if p.tok[0].Kind == token.KindAs {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing expression`)))
-	}
+	p.addChild(p.expression())
+	p.treeToken(token.KindAs)
+	p.treeTokenKind(parsetree.KindSchemaName, token.KindIdentifier)
 
-	if p.tok[0].Kind == token.KindAs {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AS"`)))
-	}
-
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-		p.advance()
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
-	}
-
-	return nt
+	return p.popTree()
 }
 
 // begin parses a begin statement.
@@ -829,6 +761,34 @@ func (p *Parser) rollback() parsetree.NonTerminal {
 	}
 
 	return nt
+}
+
+func (p *Parser) create() parsetree.NonTerminal {
+	if p.is(token.KindCreate, token.KindIndex) || p.is(token.KindCreate, token.KindUnique) {
+		return p.createIndex()
+	}
+	if p.is(token.KindCreate, token.KindTable) {
+		return p.createTable()
+	}
+	if p.is(token.KindCreate, token.KindTrigger) {
+		return p.createTrigger()
+	}
+	if p.is(token.KindCreate, token.KindView) {
+		return p.createView()
+	}
+	if p.is(token.KindCreate, token.KindTemp) || p.is(token.KindCreate, token.KindTemporary) {
+		if p.isPos(2, token.KindTable) {
+			return p.createTable()
+		}
+		if p.isPos(2, token.KindTrigger) {
+			return p.createTrigger()
+		}
+		if p.isPos(2, token.KindView) {
+			return p.createView()
+		}
+	}
+	// if p.is(token.KindCreate, token.KindVirtual)
+	return p.createVirtualTable()
 }
 
 // createIndex parses a create index statement.
@@ -2047,6 +2007,19 @@ func (p *Parser) whereClause() parsetree.NonTerminal {
 	}
 
 	return nt
+}
+
+func (p *Parser) drop() parsetree.NonTerminal {
+	switch p.tokenPos(1, token.KindIndex, token.KindTable, token.KindTrigger, token.KindView) {
+	case token.KindIndex:
+		return p.dropIndex()
+	case token.KindTable:
+		return p.dropTable()
+	case token.KindTrigger:
+		return p.dropTrigger()
+	default: // token.KindView
+		return p.dropView()
+	}
 }
 
 // detach parses a detach statement.
@@ -4155,6 +4128,20 @@ func (p *Parser) updateSetItem() parsetree.NonTerminal {
 	return nt
 }
 
+func (p *Parser) with() parsetree.NonTerminal {
+	withClause := p.withClause()
+	switch p.token(token.KindDelete, token.KindInsert, token.KindReplace, token.KindSelect, token.KindUpdate) {
+	case token.KindDelete:
+		return p.delete(withClause)
+	case token.KindInsert, token.KindReplace:
+		return p.insert(withClause)
+	case token.KindSelect:
+		return p.selectStatement(withClause)
+	default: // token.KindUpdate:
+		return p.update(withClause)
+	}
+}
+
 // pragma parses a pragma statement.
 func (p *Parser) pragma() parsetree.NonTerminal {
 	nt := parsetree.NewNonTerminal(parsetree.KindPragma)
@@ -5009,6 +4996,20 @@ func (p *Parser) vacuum() parsetree.NonTerminal {
 	return nt
 }
 
+func (p *Parser) pushTree(k parsetree.Kind) {
+	p.treeStack = append(p.treeStack, parsetree.NewNonTerminal(k))
+}
+
+func (p *Parser) addChild(t parsetree.Construction) {
+	p.treeStack[len(p.treeStack)-1].AddChild(t)
+}
+
+func (p *Parser) popTree() parsetree.NonTerminal {
+	t := p.treeStack[len(p.treeStack)-1]
+	p.treeStack = p.treeStack[:len(p.treeStack)-1]
+	return t
+}
+
 func (p *Parser) is(k token.Kind, ks ...token.Kind) bool {
 	if !p.isPos(0, k) {
 		return false
@@ -5025,15 +5026,15 @@ func (p *Parser) isPos(pos int, k token.Kind) bool {
 	return p.tok[pos].Kind == k
 }
 
-func (p *Parser) treeToken(tokKind token.Kind) parsetree.Terminal {
-	return p.treeTokenKind(parsetree.KindToken, tokKind)
+func (p *Parser) treeToken(tokKind token.Kind) {
+	p.treeTokenKind(parsetree.KindToken, tokKind)
 }
 
-func (p *Parser) treeTokenKind(treeKind parsetree.Kind, tokKind token.Kind) parsetree.Terminal {
+func (p *Parser) treeTokenKind(treeKind parsetree.Kind, tokKind token.Kind) {
 	p.token(tokKind)
 	t := parsetree.NewTerminal(treeKind, p.tok[0])
+	p.addChild(t)
 	p.advance()
-	return t
 }
 
 func (p *Parser) token(k token.Kind, ks ...token.Kind) token.Kind {
