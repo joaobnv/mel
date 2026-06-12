@@ -498,20 +498,13 @@ func (l *Lexer) colonVariable() *token.Token {
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
-	} else if !l.isAlphabetic(r) {
+	} else if !l.isAlphanumeric(r) && r != '$' {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
-	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
-		if !l.isAlphanumeric(r) && r != '$' {
-			break
-		}
-	}
-	if !eof {
-		l.r.unreadRune()
-	}
+	kind := l.parameterName(token.KindColonVariable)
 
-	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindColonVariable)
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), kind)
 }
 
 // atVariable scans an at variable.
@@ -522,20 +515,13 @@ func (l *Lexer) atVariable() *token.Token {
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
-	} else if !l.isAlphabetic(r) {
+	} else if !l.isAlphanumeric(r) && r != '$' {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
-	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
-		if !l.isAlphanumeric(r) && r != '$' {
-			break
-		}
-	}
-	if !eof {
-		l.r.unreadRune()
-	}
+	kind := l.parameterName(token.KindAtVariable)
 
-	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindAtVariable)
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), kind)
 }
 
 // dollarVariable scans a dollar variable.
@@ -546,11 +532,17 @@ func (l *Lexer) dollarVariable() *token.Token {
 	l.r.readRune()
 	if r, eof = l.r.peekRune(); eof {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
-	} else if !l.isAlphabetic(r) {
+	} else if !l.isAlphanumeric(r) && r != '$' {
 		return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorInvalidCharacterAfter)
 	}
 
-	for r, eof = l.r.readRune(); !eof; r, eof = l.r.readRune() {
+	kind := l.parameterName(token.KindDollarVariable)
+
+	return token.New(l.r.slice(offsetStart, l.r.getOffset()), kind)
+}
+
+func (l *Lexer) parameterName(k token.Kind) token.Kind {
+	for r, eof := l.r.readRune(); !eof; r, eof = l.r.readRune() {
 		if r == ':' {
 			pr, peof := l.r.peekRune()
 			if peof || pr != ':' {
@@ -567,7 +559,7 @@ func (l *Lexer) dollarVariable() *token.Token {
 				}
 			}
 			if eof2 {
-				return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindErrorUnexpectedEOF)
+				return token.KindErrorUnexpectedEOF
 			}
 			break
 		} else if !l.isAlphanumeric(r) && r != '$' {
@@ -576,7 +568,7 @@ func (l *Lexer) dollarVariable() *token.Token {
 		}
 	}
 
-	return token.New(l.r.slice(offsetStart, l.r.getOffset()), token.KindDollarVariable)
+	return k
 }
 
 // operator scans an operator.
