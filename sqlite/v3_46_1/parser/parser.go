@@ -529,47 +529,36 @@ func (p *Parser) begin() parsetree.NonTerminal {
 
 // commit parses a commit statement.
 func (p *Parser) commit() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindCommit)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindCommit)
+	p.term(token.KindCommit, token.KindEnd)
 
-	if p.tok[0].Kind == token.KindTransaction {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isSeq(token.KindTransaction) {
+		p.term()
 	}
 
-	return nt
+	return p.popTree()
 }
 
 // rollback parses a rollback statement.
 func (p *Parser) rollback() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindRollback)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindRollback)
+	p.term(token.KindRollback)
 
-	if p.tok[0].Kind == token.KindTransaction {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isSeq(token.KindTransaction) {
+		p.term()
 	}
 
-	if p.tok[0].Kind == token.KindTo {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindSavepoint {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		}
-
-		if p.tok[0].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSavepointName, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
-		}
+	if !p.isSeq(token.KindTo) {
+		return p.popTree()
 	}
 
-	return nt
+	p.term(token.KindTo)
+	if p.isSeq(token.KindSavepoint) {
+		p.term()
+	}
+	p.termKind(parsetree.KindSavepointName, token.KindIdentifier)
+
+	return p.popTree()
 }
 
 func (p *Parser) create() parsetree.NonTerminal {

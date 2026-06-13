@@ -584,13 +584,18 @@ func TestRollback(t *testing.T) {
 		"Rollback {TTT SavepointName}",
 		`ROLLBACK TO SAVEPOINT save_point_name`,
 		"Rollback {TTT SavepointName}",
-		`ROLLBACK TO`,
-		"Rollback {TT !ErrorMissing}",
-		`ROLLBACK TO SAVEPOINT`,
-		"Rollback {TTT !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).rollback)
+}
+
+func TestRollbackError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ROLLBACK TO`, msg: "expecting Identifier, got EOF"},
+		{code: `ROLLBACK TO SAVEPOINT`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).rollback)
 }
 
 func TestCreateIndex(t *testing.T) {
