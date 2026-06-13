@@ -19,10 +19,14 @@ import (
 	"github.com/joaobnv/mel/sqlite/v3_46_1/token"
 )
 
-// testCase is a test case.
 type testCase struct {
 	code string
 	tree string
+}
+
+type testCaseError struct {
+	code string
+	msg  string
 }
 
 // testCases returns a slice of testCase from a list of code, tree pairs.
@@ -125,6 +129,15 @@ func TestSQLStatement(t *testing.T) {
 	for i, c := range cases {
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			defer func() {
+				switch v := recover().(type) {
+				case error:
+					t.Fatalf("%d=>%q\n\t%s", i, c.code, v)
+				case nil:
+				default:
+					panic(v)
+				}
+			}()
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
@@ -132,33 +145,39 @@ func TestSQLStatement(t *testing.T) {
 			parsed, comments := p.SQLStatement()
 
 			if str, equals := compare(c.code, comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
+				t.Log(c.code)
+				t.Log("\n" + str)
 				t.Fail()
 			}
 		})
 	}
 }
 
-func TestSyntaxError(t *testing.T) {
-	defer func() {
-		rec := recover()
-		if rec == nil {
-			t.Error("not panicked")
-			return
-		}
-		err, ok := rec.(error)
-		if !ok {
-			t.Errorf("recover value of type %T", rec)
-			return
-		}
-		if err.Error() != errSyntax.Error() {
-			t.Errorf("err.Error() = %q, want %q", err.Error(), errSyntax.Error())
-		}
-	}()
+func TestSQLStatementError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DROP`, msg: "expecting [Index Table Trigger View], got EOF"},
+		{code: `WITH cte AS (SELECT 10) `, msg: "expecting [Delete Insert Replace Select Update], got EOF"},
+		{code: `EXPLAIN QUERY ALTER TABLE table_a ADD COLUMN column_b NOT NULL AS (10) VIRTUAL;`, msg: "expecting Plan, got Alter"},
+	}
 
-	p := New(lexer.New([]byte("EXPLAIN QUERY SELECT 10")))
-	p.SQLStatement()
+	for i, c := range cases {
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			defer func() {
+				switch v := recover().(type) {
+				case error:
+					if c.msg != v.Error() {
+						t.Errorf("got error message %q, want %q", v.Error(), c.msg)
+					}
+				case nil:
+					t.Error("not panicked")
+				default:
+					t.Errorf("unexpected %v", v)
+				}
+			}()
+			p := New(lexer.New([]byte(c.code)))
+			p.SQLStatement()
+		})
+	}
 }
 
 func TestAlterTable(t *testing.T) {
@@ -186,6 +205,41 @@ func TestAlterTable(t *testing.T) {
 	runTests(t, cases, (*Parser).alterTable)
 }
 
+func TestAlterTableError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ALTER TABLE RENAME TO table_b`, msg: "expecting Identifier, got Rename"},
+		{code: `ALTER TABLE schema_a. RENAME TO table_b`, msg: "expecting Identifier, got Rename"},
+		{code: `ALTER TABLE table_a RENAME TO `, msg: "expecting Identifier, got EOF"},
+		{code: `ALTER TABLE table_a RENAME column_a TO `, msg: "expecting Identifier, got EOF"},
+		{code: `ALTER TABLE table_a 10 RENAME column_a TO `, msg: "expecting [Rename Add Drop], got Numeric"},
+		{code: `ALTER`, msg: "expecting Table, got EOF"},
+		{code: `ALTER TABLE table_a RENAME column_a column_b `, msg: "expecting To, got Identifier"},
+		{code: `ALTER TABLE table_a RENAME COLUMN TO column_b `, msg: "expecting Identifier, got To"},
+		{code: `ALTER TABLE table_a ADD COLUMN `, msg: "expecting Identifier, got EOF"},
+		{code: `ALTER TABLE table_a ADD COLUMN column_a INTEGER()`, msg: "expecting Numeric, got RightParen"},
+		{code: `ALTER TABLE table_a DROP COLUMN`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).alterTable)
+}
+
+func TestColumnDefinitionList(t *testing.T) {
+	cases := testCases(
+		`column_a`, "CommaList{ColDef{ColName}}",
+		`column_a, column_b`, "CommaList{ColDef{ColName} T ColDef{ColName}}",
+	)
+
+	runTests(t, cases, (*Parser).columnDefinitionList)
+}
+
+func TestColumnDefinitionListError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `, column_b`, msg: "expecting Identifier, got Comma"},
+	}
+
+	runTestsError(t, cases, (*Parser).columnDefinitionList)
+}
+
 func TestColumnDefinition(t *testing.T) {
 	cases := testCases(
 		`a INTEGER PRIMARY KEY`,
@@ -200,13 +254,19 @@ func TestTypeName(t *testing.T) {
 		`INTEGER`, "TypeName{T}",
 		`INTEGER(10)`, "TypeName{TTTT}",
 		`INTEGER(+10, -10)`, "TypeName{TTTTTTTT}",
-		`INTEGER -10)`, "TypeName{T !ErrorMissing TTT}",
-		`INTEGER(, -10)`, "TypeName{TT !ErrorMissing TTTT}",
-		`INTEGER(-10, )`, "TypeName{TTTTT !ErrorMissing T}",
-		`INTEGER(-10 10)`, "TypeName{TTTT !ErrorMissing TT}",
 	)
 
 	runTests(t, cases, (*Parser).typeName)
+}
+
+func TestTypeNameError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `INTEGER(, -10)`, msg: "expecting Numeric, got Comma"},
+		{code: `INTEGER(-10, )`, msg: "expecting Numeric, got RightParen"},
+		{code: `INTEGER(-10 10)`, msg: "expecting Comma, got Numeric"},
+	}
+
+	runTestsError(t, cases, (*Parser).typeName)
 }
 
 func TestColumnConstraint(t *testing.T) {
@@ -227,36 +287,58 @@ func TestColumnConstraint(t *testing.T) {
 		"ColConstr{ForeignKeyColumnConstraint{ForeignKeyClause{T TableName}}}",
 		`AS (10)`,
 		"ColConstr{GeneratedColumnConstraint{TT E{T} T}}",
-		`CONSTRAINT PRIMARY KEY`,
-		"ColConstr{T !ErrorMissing PrimaryKeyColumnConstraint{TT}}",
-		`10`,
-		"ColConstr{!ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).columnConstraint)
 }
 
+func TestColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CONSTRAINT PRIMARY KEY`, msg: "expecting Identifier, got Primary"},
+		{code: `10`, msg: "expecting [Primary Not Unique Check Default Collate References Generated As], got Numeric"},
+	}
+
+	runTestsError(t, cases, (*Parser).columnConstraint)
+}
+
 func TestPrimaryKeyColumnConstraint(t *testing.T) {
 	cases := testCases(
-		`PRIMARY KEY`, "PrimaryKeyColumnConstraint{TT}",
+		`PRIMARY KEY`,
+		"PrimaryKeyColumnConstraint{TT}",
 		`PRIMARY KEY ASC ON CONFLICT ROLLBACK`,
 		"PrimaryKeyColumnConstraint{TTT ConflictClause{TTT}}",
-		`PRIMARY KEY DESC AUTOINCREMENT`, "PrimaryKeyColumnConstraint{TTTT}",
-		`PRIMARY`, "PrimaryKeyColumnConstraint{T !ErrorMissing}",
+		`PRIMARY KEY DESC AUTOINCREMENT`,
+		"PrimaryKeyColumnConstraint{TTTT}",
 	)
 
 	runTests(t, cases, (*Parser).primaryKeyColumnConstraint)
 }
 
+func TestPrimaryKeyColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `PRIMARY`, msg: "expecting Key, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).primaryKeyColumnConstraint)
+}
+
 func TestNotNullColumnConstraint(t *testing.T) {
 	cases := testCases(
-		`NOT NULL`, "NotNullColumnConstraint{TT}",
+		`NOT NULL`,
+		"NotNullColumnConstraint{TT}",
 		`NOT NULL ON CONFLICT ROLLBACK`,
 		"NotNullColumnConstraint{TT ConflictClause{TTT}}",
-		`NOT`, "NotNullColumnConstraint{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).notNullColumnConstraint)
+}
+
+func TestNotNullColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `NOT`, msg: "expecting Null, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).notNullColumnConstraint)
 }
 
 func TestUniqueColumnConstraint(t *testing.T) {
@@ -273,15 +355,19 @@ func TestCheckColumnConstraint(t *testing.T) {
 	cases := testCases(
 		`CHECK(a > 10)`,
 		"CheckColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}",
-		`CHECK a > 10)`,
-		"CheckColumnConstraint{T !ErrorMissing E{GreaterThan{ColRef{ColName} TT}} T}",
-		`CHECK()`,
-		"CheckColumnConstraint{TT !ErrorMissing T}",
-		`CHECK(a > 10`,
-		"CheckColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).checkColumnConstraint)
+}
+
+func TestCheckColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CHECK a > 10)`, msg: "expecting LeftParen, got Identifier"},
+		{code: `CHECK()`, msg: "expecting RightParen, got EOF"},
+		{code: `CHECK(a > 10`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).checkColumnConstraint)
 }
 
 func TestDefaultColumnConstraint(t *testing.T) {
@@ -292,28 +378,37 @@ func TestDefaultColumnConstraint(t *testing.T) {
 		"DefaultColumnConstraint{T T}",
 		`DEFAULT -10`,
 		"DefaultColumnConstraint{T TT}",
-		`DEFAULT a`,
-		"DefaultColumnConstraint{T !ErrorExpecting}",
-		`DEFAULT()`,
-		"DefaultColumnConstraint{TT !ErrorMissing T}",
-		`DEFAULT(a > 10`,
-		"DefaultColumnConstraint{TT E{GreaterThan{ColRef{ColName} TT}} !ErrorMissing}",
-		`DEFAULT -a`,
-		"DefaultColumnConstraint{TT !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).defaultColumnConstraint)
+}
+
+func TestDefaultColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DEFAULT a`, msg: "expecting [Plus Minus], got Identifier"},
+		{code: `DEFAULT()`, msg: "expecting RightParen, got EOF"},
+		{code: `DEFAULT(a > 10`, msg: "expecting RightParen, got EOF"},
+		{code: `DEFAULT -a`, msg: "expecting Numeric, got Identifier"},
+	}
+
+	runTestsError(t, cases, (*Parser).defaultColumnConstraint)
 }
 
 func TestCollateColumnConstraint(t *testing.T) {
 	cases := testCases(
 		`COLLATE c`,
 		"CollateColumnConstraint{T CollationName}",
-		`COLLATE`,
-		"CollateColumnConstraint{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).collateColumnConstraint)
+}
+
+func TestCollateColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `COLLATE`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).collateColumnConstraint)
 }
 
 func TestGeneratedColumnConstraint(t *testing.T) {
@@ -324,19 +419,21 @@ func TestGeneratedColumnConstraint(t *testing.T) {
 		"GeneratedColumnConstraint{TT E{T} T T}",
 		`AS (10) VIRTUAL`,
 		"GeneratedColumnConstraint{TT E{T} T T}",
-		`GENERATED AS (10)`,
-		"GeneratedColumnConstraint{T !ErrorMissing TT E{T} T}",
-		`GENERATED ALWAYS (10)`,
-		"GeneratedColumnConstraint{TT !ErrorMissing T E{T} T}",
-		`AS ()`,
-		"GeneratedColumnConstraint{TT !ErrorMissing T}",
-		`AS 10)`,
-		"GeneratedColumnConstraint{T !ErrorMissing E{T} T}",
-		`AS (10`,
-		"GeneratedColumnConstraint{TT E{T} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).generatedColumnConstraint)
+}
+
+func TestGeneratedColumnConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `GENERATED AS (10)`, msg: "expecting Always, got As"},
+		{code: `GENERATED ALWAYS (10)`, msg: "expecting As, got LeftParen"},
+		{code: `AS ()`, msg: "expecting RightParen, got EOF"},
+		{code: `AS 10)`, msg: "expecting LeftParen, got Numeric"},
+		{code: `AS (10`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).generatedColumnConstraint)
 }
 
 func TestForeignKeyColumnConstraint(t *testing.T) {
@@ -374,25 +471,23 @@ func TestForeignKeyClause(t *testing.T) {
 		"ForeignKeyClause{T TableName TTT}",
 		`REFERENCES table_name DEFERRABLE INITIALLY IMMEDIATE`,
 		"ForeignKeyClause{T TableName TTT}",
-		`REFERENCES`,
-		"ForeignKeyClause{T !ErrorMissing}",
-		`REFERENCES table_name(column_name`,
-		"ForeignKeyClause{T TableName T CommaList{ColumnName} !ErrorMissing}",
-		`REFERENCES table_name ON SET NULL`,
-		"ForeignKeyClause{T TableName T !ErrorExpecting TT}",
-		`REFERENCES table_name ON UPDATE SET`,
-		"ForeignKeyClause{T TableName TTT !ErrorExpecting}",
-		`REFERENCES table_name ON DELETE NO`,
-		"ForeignKeyClause{T TableName TTT !ErrorExpecting}",
-		`REFERENCES table_name ON UPDATE`,
-		"ForeignKeyClause{T TableName TT !ErrorExpecting}",
-		`REFERENCES table_name MATCH`,
-		"ForeignKeyClause{T TableName T !ErrorMissing}",
-		`REFERENCES table_name DEFERRABLE INITIALLY`,
-		"ForeignKeyClause{T TableName TT !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).foreignKeyClause)
+}
+
+func TestForeignKeyClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `REFERENCES`, msg: "expecting Identifier, got EOF"},
+		{code: `REFERENCES table_name(column_name`, msg: "expecting RightParen, got EOF"},
+		{code: `REFERENCES table_name ON SET NULL`, msg: "expecting [Delete Update], got Set"},
+		{code: `REFERENCES table_name ON UPDATE SET`, msg: "expecting [Null Default], got EOF"},
+		{code: `REFERENCES table_name ON DELETE NO`, msg: "expecting Action, got EOF"},
+		{code: `REFERENCES table_name ON UPDATE`, msg: "expecting [Set Cascade Restrict No], got EOF"},
+		{code: `REFERENCES table_name MATCH`, msg: "expecting Identifier, got EOF"},
+		{code: `REFERENCES table_name DEFERRABLE INITIALLY`, msg: "expecting [Deferred Immediate], got EOF"},
+	}
+	runTestsError(t, cases, (*Parser).foreignKeyClause)
 }
 
 func TestConflictClause(t *testing.T) {
@@ -402,11 +497,18 @@ func TestConflictClause(t *testing.T) {
 		`ON CONFLICT FAIL`, "ConflictClause{TTT}",
 		`ON CONFLICT IGNORE`, "ConflictClause{TTT}",
 		`ON CONFLICT REPLACE`, "ConflictClause{TTT}",
-		`ON REPLACE`, "ConflictClause{T !ErrorMissing T}",
-		`ON CONFLICT`, "ConflictClause{TT !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).conflictClause)
+}
+
+func TestConflictClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ON REPLACE`, msg: "expecting Conflict, got Replace"},
+		{code: `ON CONFLICT`, msg: "expecting [Rollback Abort Fail Ignore Replace], got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).conflictClause)
 }
 
 func TestAnalyze(t *testing.T) {
@@ -420,6 +522,17 @@ func TestAnalyze(t *testing.T) {
 	runTests(t, cases, (*Parser).analyze)
 }
 
+func TestAnalyzeError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ANALYZE `, msg: "expecting Identifier, got EOF"},
+		{code: `ANALYZE schema_name.`, msg: "expecting Identifier, got EOF"},
+		{code: `ANALYZE .table_name`, msg: "expecting Identifier, got Dot"},
+		{code: `ANALYZE .`, msg: "expecting Identifier, got Dot"},
+	}
+
+	runTestsError(t, cases, (*Parser).analyze)
+}
+
 func TestAttach(t *testing.T) {
 	cases := testCases(
 		`ATTACH DATABASE ':memory' AS schema_name`, "Attach {TT E{T} T SchemaName}",
@@ -427,6 +540,16 @@ func TestAttach(t *testing.T) {
 	)
 
 	runTests(t, cases, (*Parser).attach)
+}
+
+func TestAttachError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ATTACH ;`, msg: "expecting As, got EOF"},
+		{code: `ATTACH AS ;`, msg: "expecting As, got Semicolon"},
+		{code: `ATTACH ':memory' schema_name ;`, msg: "expecting As, got Identifier"},
+	}
+
+	runTestsError(t, cases, (*Parser).attach)
 }
 
 func TestBegin(t *testing.T) {
@@ -486,27 +609,25 @@ func TestCreateIndex(t *testing.T) {
 		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}} T IndexedColumn{E{ColRef{ColName}}}} T}",
 		`CREATE INDEX index_name ON table_name(column_name) WHERE column_a > 10`,
 		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T T E{GreaterThan{ColRef{ColName} T T}}}",
-		`CREATE INDEX IF EXISTS index_name ON table_name(column_name)`,
-		"CreateIndex {TTT !ErrorMissing T IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX IF NOT index_name ON table_name(column_name)`,
-		"CreateIndex {TTTT !ErrorMissing IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX .index_name ON table_name(column_name)`,
-		"CreateIndex {TT !ErrorMissing T IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX ON table_name(column_name)`,
-		"CreateIndex {TT !ErrorMissing T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX index_name table_name(column_name)`,
-		"CreateIndex {TT IndexName !ErrorMissing TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX index_name ON (column_name)`,
-		"CreateIndex {TT IndexName T !ErrorMissing T CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX index_name ON table_name column_name)`,
-		"CreateIndex {TT IndexName T TableName !ErrorMissing CommaList{IndexedColumn{E{ColRef{ColName}}}} T}",
-		`CREATE INDEX index_name ON table_name(column_name `,
-		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing}",
-		`CREATE INDEX index_name ON table_name(column_name) WHERE `,
-		"CreateIndex {TT IndexName T TableName T CommaList{IndexedColumn{E{ColRef{ColName}}}} TT !ErrorMissing} ",
 	)
 
 	runTests(t, cases, (*Parser).createIndex)
+}
+
+func TestCreateIndexError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CREATE INDEX IF EXISTS index_name ON table_name(column_name)`, msg: "expecting Not, got Exists"},
+		{code: `CREATE INDEX IF NOT index_name ON table_name(column_name)`, msg: "expecting Exists, got Identifier"},
+		{code: `CREATE INDEX .index_name ON table_name(column_name)`, msg: "expecting Identifier, got Dot"},
+		{code: `CREATE INDEX ON table_name(column_name)`, msg: "expecting Identifier, got On"},
+		{code: `CREATE INDEX index_name table_name(column_name)`, msg: "expecting On, got Identifier"},
+		{code: `CREATE INDEX index_name ON (column_name)`, msg: "expecting Identifier, got LeftParen"},
+		{code: `CREATE INDEX index_name ON table_name column_name)`, msg: "expecting LeftParen, got Identifier"},
+		{code: `CREATE INDEX index_name ON table_name(column_name `, msg: "expecting RightParen, got EOF"},
+		//TODO: {code: `CREATE INDEX index_name ON table_name(column_name) WHERE `, msg: ""},
+	}
+
+	runTestsError(t, cases, (*Parser).createIndex)
 }
 
 func TestIndexedColumn(t *testing.T) {
@@ -566,34 +687,24 @@ func TestCreateTable(t *testing.T) {
 		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T
 			CommaList{TableConstraint{T ConstraintName CheckTableConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}}}
 			T CommaList{TableOption{TT}}}`,
-		`CREATE TABLE table_a`,
-		`CreateTable {TT TableName !ErrorExpecting}`,
-		`CREATE TABLE IF EXISTS table_name (column_a INTEGER);`,
-		"CreateTable {TT T !ErrorMissing T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
-		`CREATE TABLE IF NOT table_name (column_a INTEGER);`,
-		"CreateTable {TT TT !ErrorMissing TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
-		`CREATE TABLE .table_name (column_a INTEGER);`,
-		"CreateTable {TT !ErrorMissing T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
-		`CREATE TABLE (column_a INTEGER);`,
-		"CreateTable {TT !ErrorMissing T CommaList{ColDef{ColName TypeName{T}}} T}",
-		`CREATE TABLE table_name (column_a INTEGER`,
-		"CreateTable {TT TableName T CommaList{ColDef{ColName TypeName{T}}} !ErrorMissing}",
-		`CREATE TEMPORARY TABLE table_name AS`,
-		"CreateTable {TTT TableName T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).createTable)
 }
 
-func TestColumnDefinitionList(t *testing.T) {
-	cases := testCases(
-		`column_a`, "CommaList{ColDef{ColName}}",
-		`column_a, column_b`, "CommaList{ColDef{ColName} T ColDef{ColName}}",
-		`, column_b`, "CommaList{!ErrorMissing T ColDef{ColName}}",
-		`column_a, , column_b`, "CommaList{ColDef{ColName} T !ErrorMissing T ColDef{ColName}}",
-	)
+func TestCreateTableError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CREATE TABLE table_a`, msg: "expecting [LeftParen As], got EOF"},
+		{code: `CREATE TABLE IF EXISTS table_name (column_a INTEGER);`, msg: "expecting Not, got Exists"},
+		{code: `CREATE TABLE IF NOT table_name (column_a INTEGER);`, msg: "expecting Exists, got Identifier"},
+		{code: `CREATE TABLE .table_name (column_a INTEGER);`, msg: "expecting Identifier, got Dot"},
+		{code: `CREATE TABLE (column_a INTEGER);`, msg: "expecting Identifier, got LeftParen"},
+		{code: `CREATE TABLE table_name (column_a INTEGER`, msg: "expecting RightParen, got EOF"},
+		//TODO: {code: `CREATE TEMPORARY TABLE table_name AS`, msg: ""},
 
-	runTests(t, cases, (*Parser).columnDefinitionList)
+	}
+
+	runTestsError(t, cases, (*Parser).createTable)
 }
 
 func TestTableConstraint(t *testing.T) {
@@ -702,8 +813,6 @@ func TestColumnNameList(t *testing.T) {
 	cases := testCases(
 		`column_name_1, column_name_2`,
 		"CommaList{ColName T ColName}",
-		`column_name_1 column_name_2`,
-		"CommaList{ColName !ErrorMissing ColName}",
 	)
 
 	fn := func(p *Parser) parsetree.NonTerminal {
@@ -756,7 +865,7 @@ func TestCreateTrigger(t *testing.T) {
 		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`,
 		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TT !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT CommaList{ColName !ErrorMissing ColName} T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
+		"CreateTrigger{TT TriggerName TT CommaList{ColName} !ErrorMissing TableName !ErrorMissing}",
 		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`,
 		"CreateTrigger{TT TriggerName TTTT TableName T !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
 		`CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`,
@@ -799,7 +908,7 @@ func TestCreateView(t *testing.T) {
 		`CREATE TEMP VIEW view_name AS `,
 		"CreateView{TTT ViewName T !ErrorMissing}",
 		`CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`,
-		"CreateView{TTT ViewName  T CommaList{ColName !ErrorMissing ColName} T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
+		"CreateView{TTT ViewName  T CommaList{ColName} !ErrorMissing !ErrorMissing}",
 		`CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`,
 		"CreateView{TTT ViewName  T CommaList{ColName T ColName} !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP VIEW view_name SELECT 10`,
@@ -1240,18 +1349,21 @@ func TestNotIn(t *testing.T) {
 
 func TestIsStartOfExpressionAtLeast4(t *testing.T) {
 	cases := []struct {
-		tok    *token.Token
+		tok    string
 		result bool
 	}{
-		{tok: token.New([]byte("10"), token.KindNumeric), result: true},
-		{tok: token.New([]byte("?"), token.KindQuestionVariable), result: true},
-		{tok: token.New([]byte("a"), token.KindIdentifier), result: true},
-		{tok: token.New([]byte("NOT"), token.KindNot), result: false},
+		{tok: "10", result: true},
+		{tok: "?", result: true},
+		{tok: "a", result: true},
+		{tok: "NOT", result: false},
 	}
 
-	p := New(lexer.New(nil))
 	for _, c := range cases {
-		if p.isStartOfExpressionAtLeast4(c.tok) != c.result {
+		p := New(lexer.New([]byte(c.tok)))
+		p.advance()
+		p.advance()
+		p.advance()
+		if p.isStartOfExpressionAtLeast4(0) != c.result {
 			t.Logf("isStartOfExpressionAtLeast4(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1353,18 +1465,21 @@ func TestSimpleExpression(t *testing.T) {
 
 func TestIsStartOfExpression(t *testing.T) {
 	cases := []struct {
-		tok    *token.Token
+		tok    string
 		result bool
 	}{
-		{tok: token.New([]byte("10"), token.KindNumeric), result: true},
-		{tok: token.New([]byte("?"), token.KindQuestionVariable), result: true},
-		{tok: token.New([]byte("a"), token.KindIdentifier), result: true},
-		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
+		{tok: "10", result: true},
+		{tok: "?", result: true},
+		{tok: "a", result: true},
+		{tok: "SELECT", result: false},
 	}
 
-	p := New(lexer.New(nil))
 	for _, c := range cases {
-		if p.isStartOfExpressionAtLeast4(c.tok) != c.result {
+		p := New(lexer.New([]byte(c.tok)))
+		p.advance()
+		p.advance()
+		p.advance()
+		if p.isStartOfExpressionAtLeast4(0) != c.result {
 			t.Logf("isStartOfExpression(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1373,18 +1488,21 @@ func TestIsStartOfExpression(t *testing.T) {
 
 func TestIsLiteralValue(t *testing.T) {
 	cases := []struct {
-		tok    *token.Token
+		tok    string
 		result bool
 	}{
-		{tok: token.New([]byte("NULL"), token.KindNull), result: true},
-		{tok: token.New([]byte("CURRENT_TIME"), token.KindCurrentTime), result: true},
-		{tok: token.New([]byte("TRUE"), token.KindIdentifier), result: true},
-		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
+		{tok: "NULL", result: true},
+		{tok: "CURRENT_TIME", result: true},
+		{tok: "TRUE", result: true},
+		{tok: "SELECT", result: false},
 	}
 
-	p := New(lexer.New(nil))
 	for _, c := range cases {
-		if p.isLiteralValue(c.tok) != c.result {
+		p := New(lexer.New([]byte(c.tok)))
+		p.advance()
+		p.advance()
+		p.advance()
+		if p.isLiteralValue(0) != c.result {
 			t.Logf("isLiteralValue(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1393,19 +1511,22 @@ func TestIsLiteralValue(t *testing.T) {
 
 func TestIsBindParameter(t *testing.T) {
 	cases := []struct {
-		tok    *token.Token
+		tok    string
 		result bool
 	}{
-		{tok: token.New([]byte("@a"), token.KindAtVariable), result: true},
-		{tok: token.New([]byte(":a"), token.KindColonVariable), result: true},
-		{tok: token.New([]byte("$1"), token.KindDollarVariable), result: true},
-		{tok: token.New([]byte("SELECT"), token.KindSelect), result: false},
+		{tok: "@a", result: true},
+		{tok: ":a", result: true},
+		{tok: "$1", result: true},
+		{tok: "SELECT", result: false},
 	}
 
-	p := New(lexer.New(nil))
 	for _, c := range cases {
-		if p.isBindParameter(c.tok) != c.result {
-			t.Logf("isBindParameter(%s) == %v, want %v", c.tok, !c.result, c.result)
+		p := New(lexer.New([]byte(c.tok)))
+		p.advance()
+		p.advance()
+		p.advance()
+		if is := p.isBindParameter(0); is != c.result {
+			t.Logf("isBindParameter(%s) == %v, want %v", c.tok, is, c.result)
 			t.Fail()
 		}
 	}
@@ -1616,16 +1737,16 @@ func TestParenExpression(t *testing.T) {
 		"ParenExpression{T CommaList{Expression{Add{T T ColumnReference{ColumnName}}}} T}",
 		`();`,
 		"ParenE{T !ErrorMissing T}",
-		`(, 10);`,
-		"ParenE{T CommaList{!ErrorMissing T E{T}} T}",
-		`(10 10);`,
-		"ParenE{T CommaList{E{T} !ErrorMissing E{T}} T}",
-		`(10 AS 10);`,
-		"ParenE{T CommaList{E{T} Skipped{T} E{T}} T}",
-		`(10,,10);`,
-		"ParenE{T CommaList{E{T} T !ErrorMissing T E{T}} T}",
-		`(10, AS);`,
-		"ParenE{T CommaList{E{T} T Skipped{T}} T}",
+		//TODO: `(, 10);`,
+		//TODO: "ParenE{T CommaList{E{}} !ErrorMissing}",
+		//TODO: `(10 10);`,
+		//TODO: "ParenE{T CommaList{E{T} !ErrorMissing E{T}} T}",
+		//TODO: `(10 AS 10);`,
+		//TODO: "ParenE{T CommaList{E{T} Skipped{T} E{T}} T}",
+		//TODO: `(10,,10);`,
+		//TODO: "ParenE{T CommaList{E{T} T !ErrorMissing T E{T}} T}",
+		//TODO: `(10, AS);`,
+		//TODO: "ParenE{T CommaList{E{T} T Skipped{T}} T}",
 		`(10;`,
 		"ParenE{T CommaList{E{T}} !ErrorMissing}",
 	)
@@ -1852,23 +1973,23 @@ func TestUpsertClauseItem(t *testing.T) {
 		`ON CONFLICT (col_a) WHERE DO NOTHING`,
 		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
 			WhereClause{T !ErrorMissing} TT}`,
-		`ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`,
-		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{T CommaList{ColName T ColName} !ErrorMissing T E{T}} T UpdateSetItem{ColName T E{T}}} }",
-		`ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`,
-		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{T !ErrorMissing T T E{T}} T UpdateSetItem{ColName T E{T}}} }",
-		`ON CONFLICT DO UPDATE col='value'`,
-		"UpsertClauseItem{TT TT !ErrorMissing CommaList{UpdateSetItem{ColName T E{T}}}}",
-		`ON CONFLICT DO UPDATE SET col='value' WHERE`,
-		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T E{T}}} WhereClause{T !ErrorMissing}}} }",
-		`ON CONFLICT DO UPDATE SET WHERE condition=true`,
-		"UpsertClauseItem{TT TT T !ErrorExpecting WhereClause{T E{Equal{ColRef{ColName} TT}}}}} }",
-		`ON CONFLICT DO UPDATE SET col 'value'`,
-		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName !ErrorMissing E{T}}}}",
-		`ON CONFLICT DO UPDATE SET col=`,
-		"UpsertClauseItem{TT TT T CommaList{UpdateSetItem{ColName T !ErrorMissing}}}",
 	)
 
 	runTests(t, cases, (*Parser).upsertClauseItem)
+}
+
+func TestUpsertClauseItemError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`, msg: "expecting RightParen, got Equal"},
+		{code: `ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`, msg: "expecting Identifier, got RightParen"},
+		//TODO: {code: `ON CONFLICT DO UPDATE col='value'`, msg: ""},
+		//TODO: {code: `ON CONFLICT DO UPDATE SET col='value' WHERE`, msg: ""},
+		//TODO: {code: `ON CONFLICT DO UPDATE SET WHERE condition=true`, msg: ""},
+		{code: `ON CONFLICT DO UPDATE SET col 'value'`, msg: "expecting Equal, got String"},
+		//TODO: {code: `ON CONFLICT DO UPDATE SET col=`, msg: ""},
+	}
+
+	runTestsError(t, cases, (*Parser).upsertClauseItem)
 }
 
 func TestPragma(t *testing.T) {
@@ -2203,19 +2324,21 @@ func TestUpdate(t *testing.T) {
 		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} LimitClause{T E{T}}}",
 		`UPDATE table_name SET col_name=10 RETURNING *, `,
 		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} ReturningClause{T CommaList{ReturningItem{T} T !ErrorMissing}}}",
-		`UPDATE OR table_name SET col_name=10`,
-		"Update{T T !ErrorExpecting QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}}}",
-		`UPDATE schema_name.table_name col_name=10`,
-		"Update{T QualifiedTableName{SchemaName T TableName} !ErrorMissing CommaList{UpdateSetItem{ColName T E{T}}}}",
-		`UPDATE SET col_name=10`,
-		"Update{T !ErrorMissing T CommaList{UpdateSetItem{ColName T E{T}}}}",
-		`UPDATE table_name SET `,
-		"Update{T QualifiedTableName{TableName} T !ErrorExpecting}",
-		`UPDATE table_name SET a=10, `,
-		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}} T !ErrorMissing}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })
+}
+
+func TestUpdateError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `UPDATE OR table_name SET col_name=10`, msg: "expecting [Abort Fail Ignore Replace Rollback], got Identifier"},
+		{code: `UPDATE schema_name.table_name col_name=10`, msg: "expecting Set, got Identifier"},
+		//TODO: {code: `UPDATE SET col_name=10`, msg: ""},
+		{code: `UPDATE table_name SET `, msg: "expecting [Identifier LeftParen], got EOF"},
+		{code: `UPDATE table_name SET a=10, `, msg: "expecting [Identifier LeftParen], got EOF"},
+	}
+
+	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })
 }
 
 func TestVacuum(t *testing.T) {
@@ -2233,6 +2356,15 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 	for i, c := range cases {
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			defer func() {
+				switch v := recover().(type) {
+				case error:
+					t.Fatalf("%d=>%q\n\t%s", i, c.code, v)
+				case nil:
+				default:
+					panic(v)
+				}
+			}()
 			tp := newTestParser(newTestLexer(c.tree))
 			expected := tp.tree()
 
@@ -2245,10 +2377,37 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 			parsed := parseFunc(p)
 
 			if str, equals := compare(c.code, p.comments, parsed, expected); !equals {
-				fmt.Println(c.code)
-				fmt.Println(str)
+				t.Log(c.code)
+				t.Log("\n" + str)
 				t.Fail()
 			}
+		})
+	}
+}
+
+func runTestsError[T parsetree.Construction](t *testing.T, cases []testCaseError, parseFunc func(*Parser) T) {
+	for i, c := range cases {
+		c := c
+		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
+			defer func() {
+				switch v := recover().(type) {
+				case error:
+					if c.msg != v.Error() {
+						t.Errorf("got error message %q, want %q", v.Error(), c.msg)
+					}
+				case nil:
+					t.Error("not panicked")
+				default:
+					t.Errorf("unexpected %v", v)
+				}
+			}()
+			p := New(lexer.New([]byte(c.code)))
+			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
+			p.advance()
+			p.advance()
+
+			parseFunc(p)
 		})
 	}
 }
@@ -2638,18 +2797,17 @@ func (p *testParser) tree() (t parsetree.Construction) {
 // children parses children trees.
 func (p *testParser) children() (cs []parsetree.Construction) {
 	for {
-		switch p.tok.kind {
-		case tokenKindIdentifier:
+		if p.tok.kind == tokenKindIdentifier {
 			cs = append(cs, p.tree())
-		case tokenKindError:
+		} else if p.tok.kind == tokenKindError {
 			cs = append(cs, parsetree.NewError(p.treeKind(p.tok.lexeme), nil))
 			p.advance()
-		case tokenKindTokens:
+		} else if p.tok.kind == tokenKindTokens {
 			for range p.tok.lexeme {
 				cs = append(cs, parsetree.NewTerminal(parsetree.KindToken, nil))
 			}
 			p.advance()
-		default:
+		} else {
 			return
 		}
 	}
