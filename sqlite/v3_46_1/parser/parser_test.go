@@ -641,8 +641,6 @@ func TestIndexedColumn(t *testing.T) {
 		"IndexedColumn{ColName}",
 		`column_name COLLATE c ASC`,
 		"IndexedColumn{ColName T CollationName T}",
-		`column_name COLLATE ASC`,
-		"IndexedColumn{ColName T !ErrorMissing T}",
 	)
 
 	fn := func(p *Parser) parsetree.NonTerminal {
@@ -650,6 +648,17 @@ func TestIndexedColumn(t *testing.T) {
 	}
 
 	runTests(t, cases, fn)
+}
+
+func TestIndexedColumnError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `column_name COLLATE ASC`, msg: "expecting Identifier, got Asc"},
+	}
+
+	fn := func(p *Parser) parsetree.NonTerminal {
+		return p.indexedColumn(false)
+	}
+	runTestsError(t, cases, fn)
 }
 
 func TestIndexedColumnExpression(t *testing.T) {
@@ -723,71 +732,94 @@ func TestTableConstraint(t *testing.T) {
 		`FOREIGN KEY (column_name) REFERENCES table_name(column_name)`,
 		`TableConstraint{ForeignKeyTableConstraint{TTT CommaList{ColName} T
 			ForeignKeyClause{T TableName T CommaList{ColName} T}}}`,
-		`CONSTRAINT PRIMARY KEY (column_name)`,
-		"TableConstraint{T !ErrorMissing PrimaryKeyTableConstraint{TTT CommaList{IndexedColumn{ColName}} T}}",
-		`CONSTRAINT pk CREATE`,
-		"TableConstraint{T ConstraintName !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).tableConstraint)
+}
+
+func TestTableConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CONSTRAINT PRIMARY KEY (column_name)`, msg: "expecting Identifier, got Primary"},
+		{code: `CONSTRAINT pk CREATE`, msg: "expecting [Primary Unique Check Foreign], got Create"},
+	}
+
+	runTestsError(t, cases, (*Parser).tableConstraint)
 }
 
 func TestPrimaryKeyTableConstraint(t *testing.T) {
 	cases := testCases(
 		`PRIMARY KEY (column_name) ON CONFLICT ROLLBACK`,
 		"PrimaryKeyTableConstraint{TT T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
-		`PRIMARY (column_name)`,
-		"PrimaryKeyTableConstraint{T !ErrorMissing T CommaList{IndexedColumn{ColName}} T}",
-		`PRIMARY KEY column_name)`,
-		"PrimaryKeyTableConstraint{TT !ErrorMissing CommaList{IndexedColumn{ColName}} T}",
-		`PRIMARY KEY (column_name`,
-		"PrimaryKeyTableConstraint{TT T CommaList{IndexedColumn{ColName}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).primaryKeyTableConstraint)
+}
+
+func TestPrimaryKeyTableConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `PRIMARY (column_name)`, msg: "expecting Key, got LeftParen"},
+		{code: `PRIMARY KEY column_name)`, msg: "expecting LeftParen, got Identifier"},
+		{code: `PRIMARY KEY (column_name`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).primaryKeyTableConstraint)
 }
 
 func TestUniqueTableConstraint(t *testing.T) {
 	cases := testCases(
 		`UNIQUE (column_name) ON CONFLICT ROLLBACK`,
 		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
-		`UNIQUE column_name)`,
-		"UniqueTableConstraint{T !ErrorMissing CommaList{IndexedColumn{ColName}} T}",
-		`UNIQUE (column_name`,
-		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).uniqueTableConstraint)
 }
 
+func TestUniqueTableConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `UNIQUE column_name)`, msg: "expecting LeftParen, got Identifier"},
+		{code: `UNIQUE (column_name`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).uniqueTableConstraint)
+}
+
 func TestCheckTableConstraint(t *testing.T) {
 	cases := testCases(
 		`CHECK (TRUE)`, "CheckTableConstraint{T T E{T} T}",
-		`CHECK TRUE)`, "CheckTableConstraint{T !ErrorMissing E{T} T}",
-		`CHECK ()`, "CheckTableConstraint{T T !ErrorMissing T}",
-		`CHECK (TRUE`, "CheckTableConstraint{T T E{T} !ErrorMissing }",
 	)
 
 	runTests(t, cases, (*Parser).checkTableConstraint)
+}
+
+func TestCheckTableConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CHECK TRUE)`, msg: "expecting LeftParen, got Identifier"},
+		//TODO: {code: `CHECK ()`, msg: ""},
+		{code: `CHECK (TRUE`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).checkTableConstraint)
 }
 
 func TestForeignKeyTableConstraint(t *testing.T) {
 	cases := testCases(
 		`FOREIGN KEY (column_name) REFERENCES table_name`,
 		"ForeignKeyTableConstraint{TT T CommaList{ColName} T ForeignKeyClause{T TableName}}",
-		`FOREIGN (column_name) REFERENCES table_name`,
-		"ForeignKeyTableConstraint{T !ErrorMissing T CommaList{ColName} T ForeignKeyClause{T TableName}}",
-		`FOREIGN KEY column_name) REFERENCES table_name`,
-		"ForeignKeyTableConstraint{TT !ErrorMissing CommaList{ColName} T ForeignKeyClause{T TableName}}",
-		`FOREIGN KEY () REFERENCES table_name`,
-		"ForeignKeyTableConstraint{TT T !ErrorMissing T ForeignKeyClause{T TableName}}",
-		`FOREIGN KEY (column_name REFERENCES table_name`,
-		"ForeignKeyTableConstraint{TT T CommaList{ColName} !ErrorMissing ForeignKeyClause{T TableName}}",
-		`FOREIGN KEY (column_name)`,
-		"ForeignKeyTableConstraint{TT T CommaList{ColName} T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).foreignKeyTableConstraint)
+}
+
+func TestForeignKeyTableConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `FOREIGN (column_name) REFERENCES table_name`, msg: "expecting Key, got LeftParen"},
+		{code: `FOREIGN KEY column_name) REFERENCES table_name`, msg: "expecting LeftParen, got Identifier"},
+		{code: `FOREIGN KEY () REFERENCES table_name`, msg: "expecting Identifier, got RightParen"},
+		{code: `FOREIGN KEY (column_name REFERENCES table_name`, msg: "expecting RightParen, got References"},
+		{code: `FOREIGN KEY (column_name)`, msg: "expecting References, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).foreignKeyTableConstraint)
 }
 
 func TestTableOptions(t *testing.T) {
@@ -807,11 +839,17 @@ func TestTableOption(t *testing.T) {
 		"TableOption{TT}",
 		`STRICT`,
 		"TableOption{T}",
-		`WITHOUT`,
-		"TableOption{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).tableOption)
+}
+
+func TestTableOptionError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `WITHOUT`, msg: "expecting RowId, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).tableOption)
 }
 
 func TestColumnNameList(t *testing.T) {
@@ -845,53 +883,35 @@ func TestCreateTrigger(t *testing.T) {
 				TriggerBody{T Update {T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColumnName T E{T}}}} TT}}`,
 		`CREATE TRIGGER trigger_name UPDATE OF a, b ON table_name BEGIN SELECT 10; END`,
 		"CreateTrigger{TT TriggerName TT CommaList{ColName T ColName} T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name DELETE table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName T !ErrorMissing TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name DELETE ON BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10 END`,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing T}}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10; `,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T !ErrorMissing}}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN ; END`,
-		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T !ErrorExpecting TT}}",
-		`CREATE TEMP TRIGGER IF EXISTS trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT T !ErrorMissing T TriggerName TTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMP TRIGGER IF NOT trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT TT !ErrorMissing TriggerName TTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT TTT TriggerName T !ErrorExpecting T TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMPORARY TRIGGER .trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT !ErrorMissing T TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMPORARY TRIGGER schema_name trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName !ErrorMissing TriggerName TTT TableName TTT TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR ROW BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName T !ErrorMissing T TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`,
-		"CreateTrigger{TTT SchemaName T TriggerName TTT TableName TT !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TT CommaList{ColName} !ErrorMissing TableName !ErrorMissing}",
-		`CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName TTTT TableName T !ErrorMissing TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT TriggerName T !ErrorMissing TT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER INSTEAD OF UPDATE ON table_name BEGIN SELECT 10; END`,
-		"CreateTrigger{TT !ErrorMissing TTTT TableName TriggerBody{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} TT}}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name`,
-		"CreateTrigger{TT TriggerName TT TableName !ErrorMissing}",
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) ; END`,
-		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T WithClause{T CommaList{
-				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
-				!ErrorExpecting
-			TT}}`,
-		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) END`,
-		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T WithClause{T CommaList{
-				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
-				!ErrorExpecting
-			T}}`,
 	)
 
 	runTests(t, cases, (*Parser).createTrigger)
+}
+
+func TestCreateTriggerError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CREATE TRIGGER trigger_name DELETE table_name BEGIN SELECT 10; END`, msg: "expecting On, got Identifier"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON BEGIN SELECT 10; END`, msg: "expecting Identifier, got Begin"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10 END`, msg: "expecting Semicolon, got End"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name BEGIN SELECT 10; `, msg: "expecting [Delete Insert Select Update], got EOF"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name BEGIN ; END`, msg: "expecting [Delete Insert Select Update], got Semicolon"},
+		{code: `CREATE TEMP TRIGGER IF EXISTS trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`, msg: "expecting Not, got Exists"},
+		{code: `CREATE TEMP TRIGGER IF NOT trigger_name BEFORE DELETE ON table_name BEGIN SELECT 10; END`, msg: "expecting Exists, got Identifier"},
+		{code: `CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE ON table_name BEGIN SELECT 10; END`, msg: "expecting [Delete Insert Update], got On"},
+		{code: `CREATE TEMPORARY TRIGGER .trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`, msg: "expecting Identifier, got Dot"},
+		{code: `CREATE TEMPORARY TRIGGER schema_name trigger_name AFTER INSERT ON table_name FOR EACH ROW BEGIN SELECT 10; END`, msg: "expecting [Delete Insert Update], got Identifier"},
+		{code: `CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR ROW BEGIN SELECT 10; END`, msg: "expecting Each, got Row"},
+		{code: `CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`, msg: "expecting Row, got Begin"},
+		{code: `CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`, msg: "expecting On, got Identifier"},
+		//TODO: {code: `CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`, msg: ""},
+		{code: `CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`, msg: "expecting Of, got Update"},
+		{code: `CREATE TRIGGER INSTEAD OF UPDATE ON table_name BEGIN SELECT 10; END`, msg: "expecting Identifier, got Instead"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name`, msg: "expecting Begin, got EOF"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) ; END`, msg: "expecting [Delete Insert Select Update], got Semicolon"},
+		{code: `CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) END`, msg: "expecting [Delete Insert Select Update], got End"},
+	}
+
+	runTestsError(t, cases, (*Parser).createTrigger)
 }
 
 func TestCreateView(t *testing.T) {
@@ -2395,6 +2415,7 @@ func runTestsError[T parsetree.Construction](t *testing.T, cases []testCaseError
 		c := c
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
 			defer func() {
+				t.Logf("%q", c.code)
 				switch v := recover().(type) {
 				case error:
 					if c.msg != v.Error() {
@@ -2403,7 +2424,7 @@ func runTestsError[T parsetree.Construction](t *testing.T, cases []testCaseError
 				case nil:
 					t.Error("not panicked")
 				default:
-					t.Errorf("unexpected %v", v)
+					t.Errorf("unexpected: %v", v)
 				}
 			}()
 			p := New(lexer.New([]byte(c.code)))
