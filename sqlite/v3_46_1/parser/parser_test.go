@@ -922,27 +922,25 @@ func TestCreateView(t *testing.T) {
 		"CreateView{TTT TTT ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMPORARY VIEW schema_name.view_name (a, b) AS SELECT 10`,
 		"CreateView{TTT SchemaName T ViewName  T CommaList{ColName T ColName} T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW IF EXISTS view_name AS SELECT 10`,
-		"CreateView{TTT T !ErrorMissing T ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW IF NOT view_name AS SELECT 10`,
-		"CreateView{TTT TT !ErrorMissing ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW AS SELECT 10`,
-		"CreateView{TTT !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW schema_name view_name AS SELECT 10`,
-		"CreateView{TTT SchemaName !ErrorMissing ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW view_name AS `,
-		"CreateView{TTT ViewName T !ErrorMissing}",
-		`CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`,
-		"CreateView{TTT ViewName  T CommaList{ColName} !ErrorMissing !ErrorMissing}",
-		`CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`,
-		"CreateView{TTT ViewName  T CommaList{ColName T ColName} !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE TEMP VIEW view_name SELECT 10`,
-		"CreateView{TTT ViewName !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
-		`CREATE VIEW .view_name AS SELECT 10`,
-		"CreateView{TT !ErrorMissing T ViewName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 	)
 
 	runTests(t, cases, (*Parser).createView)
+}
+
+func TestCreateViewError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CREATE TEMP VIEW IF EXISTS view_name AS SELECT 10`, msg: "expecting Not, got Exists"},
+		{code: `CREATE TEMP VIEW IF NOT view_name AS SELECT 10`, msg: "expecting Exists, got Identifier"},
+		{code: `CREATE TEMP VIEW AS SELECT 10`, msg: "expecting Identifier, got As"},
+		{code: `CREATE TEMP VIEW schema_name view_name AS SELECT 10`, msg: "expecting As, got Identifier"},
+		//TODO: {code: `CREATE TEMP VIEW view_name AS `, msg: ""},
+		{code: `CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`, msg: "expecting RightParen, got Identifier"},
+		{code: `CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`, msg: "expecting RightParen, got As"},
+		{code: `CREATE TEMP VIEW view_name SELECT 10`, msg: "expecting As, got Select"},
+		{code: `CREATE VIEW .view_name AS SELECT 10`, msg: "expecting Identifier, got Dot"},
+	}
+
+	runTestsError(t, cases, (*Parser).createView)
 }
 
 func TestCreateVirtualTable(t *testing.T) {

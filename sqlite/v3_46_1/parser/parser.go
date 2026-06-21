@@ -969,89 +969,36 @@ func (p *Parser) triggerBody() parsetree.NonTerminal {
 
 // createView parses a create view statement.
 func (p *Parser) createView() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindCreateView)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindCreateView)
 
-	if p.tok[0].Kind == token.KindTemp || p.tok[0].Kind == token.KindTemporary {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	p.term(token.KindCreate)
+	if p.isAnyOf(token.KindTemp, token.KindTemporary) {
+		p.term()
+	}
+	p.term(token.KindView)
+
+	if p.is(token.KindIf) {
+		p.term()
+		p.term(token.KindNot)
+		p.term(token.KindExists)
 	}
 
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	if p.isAnyOf(token.KindIdentifier, token.KindTemp) && p.isPos(1, token.KindDot) {
+		p.termKind(parsetree.KindSchemaName)
+		p.term(token.KindDot)
+	}
+	p.termKind(parsetree.KindViewName, token.KindIdentifier)
 
-	if p.tok[0].Kind == token.KindIf {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindNot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[0].Kind == token.KindExists {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
-		}
-
-		if p.tok[0].Kind == token.KindExists {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
-		}
+	if p.is(token.KindLeftParen) {
+		p.term()
+		p.addChild(p.columnNameList())
+		p.term(token.KindRightParen)
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
-		if p.tok[1].Kind == token.KindDot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[1].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
-		}
-	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	}
+	p.term(token.KindAs)
+	p.addChild(p.selectStatement(nil))
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindViewName, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindAs || p.tok[0].Kind == token.KindLeftParen {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing view name`)))
-	}
-
-	if p.tok[0].Kind == token.KindLeftParen {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		nt.AddChild(p.columnNameList(token.KindRightParen, token.KindSemicolon, token.KindAs, token.KindEOF))
-
-		if p.tok[0].Kind == token.KindRightParen {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
-		}
-	}
-
-	if p.tok[0].Kind == token.KindAs {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindSelect {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "AS"`)))
-	}
-
-	if p.tok[0].Kind == token.KindSelect {
-		nt.AddChild(p.selectStatement(nil))
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing select`)))
-	}
-
-	return nt
+	return p.popTree()
 }
 
 // createVirtualTable parses a create virtual table statement.
