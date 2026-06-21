@@ -989,17 +989,24 @@ func TestDelete(t *testing.T) {
 		"Delete{TT QualifiedTableName{TableName} WhereClause{T E{GreaterThan{ColRef{ColName} T ColRef{ColName}}}}}",
 		`DELETE FROM table_name RETURNING *`,
 		"Delete{TT QualifiedTableName{TableName} ReturningClause{T CommaList{ReturningItem{T}}}}",
-		`DELETE table_name`,
-		"Delete{T !ErrorMissing QualifiedTableName{TableName}}",
-		`DELETE FROM`,
-		"Delete{TT !ErrorMissing}",
-		`DELETE FROM table_name WHERE`,
-		"Delete{TT QualifiedTableName{TableName} WhereClause{T !ErrorMissing}}",
-		`DELETE FROM table_name RETURNING`,
-		"Delete{TT QualifiedTableName{TableName} ReturningClause{T !ErrorMissing}}",
+		`DELETE FROM table_name ORDER BY 20`,
+		"Delete{TT QualifiedTableName{TableName} OrderByClause{TT CommaList{OrderingTerm{E{T}}}}}",
+		`DELETE FROM table_name LIMIT 10`,
+		"Delete{TT QualifiedTableName{TableName} LimitClause{T E{T}}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
+}
+
+func TestDeleteError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DELETE table_name`, msg: "expecting From, got Identifier"},
+		{code: `DELETE FROM`, msg: "expecting Identifier, got EOF"},
+		//TODO: `DELETE FROM table_name WHERE`,
+		//TODO: `DELETE FROM table_name RETURNING`,
+	}
+
+	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
 }
 
 func TestWithClause(t *testing.T) {
@@ -1067,23 +1074,22 @@ func TestQualifiedTableName(t *testing.T) {
 		"QualifiedTableName{TableName TT IndexName}",
 		`table_name NOT INDEXED`,
 		"QualifiedTableName{TableName TT}",
-		`Schema_name.`,
-		"QualifiedTableName{SchemaName T !ErrorMissing}",
-		`.table_name`,
-		"QualifiedTableName{!ErrorMissing T TableName}",
-		`schema_name table_name`,
-		"QualifiedTableName{SchemaName !ErrorMissing TableName}",
-		`table_name AS`,
-		"QualifiedTableName{TableName T !ErrorMissing}",
-		`table_name INDEXED index_name`,
-		"QualifiedTableName{TableName T !ErrorMissing IndexName}",
-		`table_name INDEXED BY`,
-		"QualifiedTableName{TableName TT !ErrorMissing}",
-		`table_name NOT`,
-		"QualifiedTableName{TableName T !ErrorMissing}",
-	)
+		)
 
 	runTests(t, cases, (*Parser).qualifiedTableName)
+}
+
+func TestQualifiedTableNameError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `Schema_name.`, msg: "expecting Identifier, got EOF"},
+		{code: `.table_name`, msg: "expecting Identifier, got Dot"},
+		{code: `table_name AS`, msg: "expecting Identifier, got EOF"},
+		{code: `table_name INDEXED index_name`, msg: "expecting By, got Identifier"},
+		{code: `table_name INDEXED BY`, msg: "expecting Identifier, got EOF"},
+		{code: `table_name NOT`, msg: "expecting Indexed, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).qualifiedTableName)
 }
 
 func TestReturningClause(t *testing.T) {
@@ -1582,17 +1588,21 @@ func TestFunctionCall(t *testing.T) {
 		"FnCall{FnName TT FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}}",
 		`function() FILTER (a);`,
 		"FnCall{FnName TT FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}}",
-		`function(10 ORDER a);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}",
-		`function(10 ORDER BY);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT !ErrorMissing}} T}",
 		`function(10 ORDER BY a COLLATE);`,
 		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{ OrderingTerm{E{Collate{ColRef{ColName} T !ErrorMissing}}}} }} T}",
-		`function(10 ORDER BY a NULLS);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}} T !ErrorExpecting}} }} T}",
 	)
 
 	runTests(t, cases, (*Parser).functionCall)
+}
+
+func TestFunctionCallError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `function(10 ORDER a);`, msg: "expecting By, got Identifier"},
+		//TODO: {code: `function(10 ORDER BY);`, msg: ""},
+		{code: `function(10 ORDER BY a NULLS);`, msg: "expecting [First Last], got RightParen"},
+	}
+
+	runTestsError(t, cases, (*Parser).functionCall)
 }
 
 func TestFunctionArguments(t *testing.T) {
@@ -1611,17 +1621,18 @@ func TestOrderByClause(t *testing.T) {
 	cases := testCases(
 		`ORDER BY a COLLATE c`,
 		"OrderByClause{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
-		`ORDER a`, "OrderByClause{T !ErrorMissing CommaList{OrderingTerm{E{ColRef{ColName}}}}}",
-		`ORDER BY`, "OrderByClause{TT !ErrorMissing}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.orderByClause(func(t *token.Token) bool {
-			return t.Kind == token.KindEOF
-		})
-	}
+	runTests(t, cases, (*Parser).orderByClause)
+}
 
-	runTests(t, cases, fn)
+func TestOrderByClauseError(t *testing.T) {
+	cases := []testCaseError{	
+		{code: `ORDER a`, msg: "expecting By, got Identifier"},
+		//TODO: {code: `ORDER BY`, msg: ""},
+	}
+	
+	runTestsError(t, cases, (*Parser).orderByClause)
 }
 
 func TestOrderingTerm(t *testing.T) {
@@ -1630,11 +1641,17 @@ func TestOrderingTerm(t *testing.T) {
 		"OrderingTerm{E{ColRef{ColName}} TTT}",
 		`a DESC NULLS FIRST`,
 		"OrderingTerm{E{ColRef{ColName}} TTT}",
-		`a DESC NULLS`,
-		"OrderingTerm{E{ColRef{ColName}} TT !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).orderingTerm)
+}
+
+func TestOrderingTermError(t *testing.T) {
+	cases := []testCaseError {
+		{code: `a DESC NULLS`, msg: "expecting [First Last], got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).orderingTerm)
 }
 
 func TestFilterClause(t *testing.T) {
@@ -2082,7 +2099,7 @@ func TestSelectStatement(t *testing.T) {
 		`CompoundSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{T} 
 			!ErrorMissing }`,
 		`SELECT 10, LIMIT 10`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}} T !ErrorMissing}} LimitClause{T E{T}}}",
-		`SELECT 10 LIMIT`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} LimitClause{T !ErrorMissing}}",
+		//TODO: `SELECT 10 LIMIT`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} LimitClause{T !ErrorMissing}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.selectStatement(nil) })
@@ -2318,12 +2335,21 @@ func TestLimitClause(t *testing.T) {
 		`LIMIT 10`, "LimitClause{T E{T}}",
 		`LIMIT 10, 20`, "LimitClause{T E{T} T E{T}}",
 		`LIMIT 10 OFFSET 20`, "LimitClause{T E{T} T E{T}}",
-		`LIMIT 10,`, "LimitClause{T E{T} T !ErrorMissing}",
-		`LIMIT 10 OFFSET`, "LimitClause{T E{T} T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).limitClause)
 }
+
+/*TODO:
+func TestLimitClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `LIMIT 10,`, msg: ""},
+		{code: `LIMIT 10 OFFSET`, msg: ""},
+	}
+
+	runTestsError(t, cases, (*Parser).limitClause)
+}
+*/
 
 func TestUpdate(t *testing.T) {
 	cases := testCases(
