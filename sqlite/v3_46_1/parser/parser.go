@@ -15,11 +15,15 @@ import (
 )
 
 type syntaxError struct {
+	msg string
 	expected []token.Kind
 	got      *token.Token
 }
 
 func (se *syntaxError) Error() string {
+	if se.msg != "" {
+		return se.msg
+	}
 	if len(se.expected) == 1 {
 		return fmt.Sprintf("expecting %s, got %s", se.expected[0], se.got.Kind)
 	}
@@ -1003,161 +1007,98 @@ func (p *Parser) createView() parsetree.NonTerminal {
 
 // createVirtualTable parses a create virtual table statement.
 func (p *Parser) createVirtualTable() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindCreateVirtualTable)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindCreateVirtualTable)
+	
+	p.term(token.KindCreate)
+	p.term(token.KindVirtual)
+	p.term(token.KindTable)
 
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
-
-	if p.tok[0].Kind == token.KindTable {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindIf || p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "TABLE"`)))
+	if p.is(token.KindIf) {
+		p.term()
+		p.term(token.KindNot)
+		p.term(token.KindExists)
 	}
 
-	if p.tok[0].Kind == token.KindIf {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isAnyOf(token.KindIdentifier, token.KindTemp) && p.isPos(1, token.KindDot) {
+		p.termKind(parsetree.KindSchemaName)
+		p.term(token.KindDot)
+	}
+	p.termKind(parsetree.KindTableName, token.KindIdentifier)
 
-		if p.tok[0].Kind == token.KindNot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[0].Kind == token.KindExists {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "NOT"`)))
-		}
+	p.term(token.KindUsing)
+	p.termKind(parsetree.KindModuleName, token.KindIdentifier)
 
-		if p.tok[0].Kind == token.KindExists {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
-		}
+	if p.is(token.KindLeftParen) {
+		p.term()
+		p.addChild(p.moduleArgumentList())
+		p.term(token.KindRightParen)
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
-		if p.tok[1].Kind == token.KindDot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[1].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
-		}
-	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	}
-
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindTableName, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindUsing {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing table name`)))
-	}
-
-	if p.tok[0].Kind == token.KindUsing {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "USING"`)))
-	}
-
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindModuleName, p.tok[0]))
-		p.advance()
-	} else if p.tok[0].Kind == token.KindLeftParen || p.tok[0].Kind == token.KindSemicolon || p.tok[0].Kind == token.KindEOF {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing module name`)))
-	}
-
-	if p.tok[0].Kind == token.KindLeftParen {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		nt.AddChild(p.moduleArgumentList())
-
-		if p.tok[0].Kind == token.KindRightParen {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
-		}
-	}
-
-	return nt
+	return p.popTree()
 }
 
 // moduleArgumentList parses a list of module arguments separated by comma.
 func (p *Parser) moduleArgumentList() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindCommaList)
-
-	if p.tok[0].Kind == token.KindRightParen {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing module argument`)))
-		return nt
-	}
+	p.pushTree(parsetree.KindCommaList)
 
 	for {
-		nt.AddChild(p.moduleArgument())
+		p.addChild(p.moduleArgument())
 
-		switch p.tok[0].Kind {
-		case token.KindRightParen, token.KindEOF:
-			return nt
-		case token.KindComma:
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
+		if p.is(token.KindComma) {
+			p.term()
+		} else {
+			break
 		}
 	}
+
+	return p.popTree()
 }
 
 // moduleArgument parses a module argument in a create virtual table statement.
 func (p *Parser) moduleArgument() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindModuleArgument)
+	p.pushTree(parsetree.KindModuleArgument)
+	var found bool
 	for {
-		switch p.tok[0].Kind {
-		case token.KindComma, token.KindRightParen, token.KindEOF:
-			return nt
-		case token.KindLeftParen:
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-			p.moduleArgumentInner(nt)
-			if p.tok[0].Kind == token.KindRightParen {
-				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-				p.advance()
+		if p.is(token.KindLeftParen) {
+			found = true
+			p.term()
+			p.moduleArgumentInner()
+			p.term(token.KindRightParen)
+		} else if p.isAnyOf(token.KindComma, token.KindRightParen) {
+			if found {
+				break
 			} else {
-				return nt
+				p.errorUnexpected()
 			}
-		default:
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
+		} else if p.is(token.KindEOF) {
+			p.errorUnexpected()
+		}	else {
+			found = true
+			p.term()
+		}
+	}
+	return p.popTree()
+}
+
+// moduleArgumentInner parses a part of a module argument. The part is delimited by parenthesis.
+func (p *Parser) moduleArgumentInner() {
+	for {
+		if p.is(token.KindLeftParen) {
+			p.term()
+			p.moduleArgumentInner()
+			p.term(token.KindRightParen)
+		} else if p.is(token.KindRightParen) {
+			break
+		} else if p.is(token.KindEOF) {
+			p.errorUnexpected()
+		} else {
+			p.term()
 		}
 	}
 }
 
-// moduleArgumentInner parses a part of a module argument. The part is delimited by parenthesis.
-func (p *Parser) moduleArgumentInner(nt parsetree.NonTerminal) {
-	for {
-		switch p.tok[0].Kind {
-		case token.KindRightParen, token.KindEOF:
-			return
-		case token.KindLeftParen:
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-			p.moduleArgumentInner(nt)
-			if p.tok[0].Kind == token.KindRightParen {
-				nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-				p.advance()
-			} else {
-				return
-			}
-		default:
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		}
-	}
+func (p *Parser) errorUnexpected() {
+	panic(&syntaxError{msg: fmt.Sprintf("unexpected %s", p.tok[0].Kind)})
 }
 
 // delete parses a delete statement.

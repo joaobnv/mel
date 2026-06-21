@@ -684,6 +684,8 @@ func TestCreateTable(t *testing.T) {
 		"CreateTable {TT TableName T CommaList{ColDef{ColName}} T}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
 		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
+		`CREATE TEMP TABLE IF NOT EXISTS schema_name.table_name (column_a INTEGER);`,
+		"CreateTable {TTT TTT SchemaName T TableName T CommaList{ColDef{ColName TypeName{T}}} T}",
 		`CREATE TEMPORARY TABLE table_name AS SELECT 'value';`,
 		"CreateTable {TTT TableName T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}}",
 		`CREATE TEMP TABLE IF NOT EXISTS temp.table_name (column_a INTEGER);`,
@@ -957,29 +959,26 @@ func TestCreateVirtualTable(t *testing.T) {
 		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTT}} T}",
 		`CREATE VIRTUAL TABLE table_name USING module_name(function(function(arg)))`,
 		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTTTTT}} T}",
-		`CREATE VIRTUAL table_name USING module_name`,
-		"CreateVirtualTable{TT !ErrorMissing TableName T ModuleName}",
-		`CREATE VIRTUAL TABLE IF EXISTS table_name USING module_name`,
-		"CreateVirtualTable{TTT T !ErrorMissing T TableName T ModuleName}",
-		`CREATE VIRTUAL TABLE IF NOT table_name USING module_name`,
-		"CreateVirtualTable{TTT TT !ErrorMissing TableName T ModuleName}",
-		`CREATE VIRTUAL TABLE .table_name USING module_name`,
-		"CreateVirtualTable{TTT !ErrorMissing T TableName T ModuleName}",
-		`CREATE VIRTUAL TABLE schema_name. USING module_name`,
-		"CreateVirtualTable{TTT SchemaName T !ErrorMissing T ModuleName}",
-		`CREATE VIRTUAL TABLE schema_name table_name USING module_name`,
-		"CreateVirtualTable{TTT SchemaName !ErrorMissing TableName T ModuleName}",
-		`CREATE VIRTUAL TABLE schema_name.table_name module_name`,
-		"CreateVirtualTable{TTT SchemaName T TableName !ErrorMissing ModuleName}",
-		`CREATE VIRTUAL TABLE table_name USING`,
-		"CreateVirtualTable{TTT TableName T !ErrorMissing}",
-		`CREATE VIRTUAL TABLE table_name USING module_name()`,
-		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{!ErrorMissing} T}",
-		`CREATE VIRTUAL TABLE table_name USING module_name(function(function(`,
-		"CreateVirtualTable{TTT TableName T ModuleName T CommaList{ModuleArgument{TTTT}} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).createVirtualTable)
+}
+
+func TestCreateVirtualTableError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CREATE VIRTUAL table_name USING module_name`, msg: "expecting Table, got Identifier"},
+		{code: `CREATE VIRTUAL TABLE IF EXISTS table_name USING module_name`, msg: "expecting Not, got Exists"},
+		{code: `CREATE VIRTUAL TABLE IF NOT table_name USING module_name`, msg: "expecting Exists, got Identifier"},
+		{code: `CREATE VIRTUAL TABLE .table_name USING module_name`, msg: "expecting Identifier, got Dot"},
+		{code: `CREATE VIRTUAL TABLE schema_name. USING module_name`, msg: "expecting Identifier, got Using"},
+		{code: `CREATE VIRTUAL TABLE schema_name table_name USING module_name`, msg: "expecting Using, got Identifier"},
+		{code: `CREATE VIRTUAL TABLE schema_name.table_name module_name`, msg: "expecting Using, got Identifier"},
+		{code: `CREATE VIRTUAL TABLE table_name USING`, msg: "expecting Identifier, got EOF"},
+		{code: `CREATE VIRTUAL TABLE table_name USING module_name()`, msg: "unexpected RightParen"},
+		{code: `CREATE VIRTUAL TABLE table_name USING module_name(function(function(`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).createVirtualTable)
 }
 
 func TestDelete(t *testing.T) {
