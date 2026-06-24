@@ -1164,13 +1164,19 @@ func TestDropTable(t *testing.T) {
 		`DROP TABLE table_name`, "DropTable{TT TableName}",
 		`DROP TABLE IF EXISTS table_name`, "DropTable{TT TT TableName}",
 		`DROP TABLE temp.table_name`, "DropTable{TT SchemaName T TableName}",
-		`DROP TABLE IF table_name`, "DropTable{TT T !ErrorMissing TableName}",
-		`DROP TABLE .table_name`, "DropTable{TT !ErrorMissing T TableName}",
-		`DROP TABLE schema_name.`, "DropTable{TT SchemaName T !ErrorMissing}",
-		`DROP TABLE schema_name table_name`, "DropTable{TT SchemaName !ErrorMissing TableName}",
 	)
 
 	runTests(t, cases, (*Parser).dropTable)
+}
+
+func TestDropTableError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DROP TABLE IF table_name`, msg: "expecting Exists, got Identifier"},
+		{code: `DROP TABLE .table_name`, msg: "expecting Identifier, got Dot"},
+		{code: `DROP TABLE schema_name.`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).dropTable)
 }
 
 func TestDropTrigger(t *testing.T) {
