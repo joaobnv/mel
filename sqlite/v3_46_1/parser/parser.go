@@ -1339,50 +1339,23 @@ func (p *Parser) dropTable() parsetree.NonTerminal {
 
 // dropTrigger parses a drop trigger statement.
 func (p *Parser) dropTrigger() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindDropTrigger)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTree(parsetree.KindDropTrigger)
 
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.term(token.KindDrop)
+	p.term(token.KindTrigger)
 
-	if p.tok[0].Kind == token.KindIf {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindExists {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing "EXISTS"`)))
-		}
+	if p.is(token.KindIf) {
+		p.term()
+		p.term(token.KindExists)
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
-		if p.tok[1].Kind == token.KindDot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[1].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
-		}
-	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isAnyOf(token.KindIdentifier, token.KindTemp) && p.isPos(1, token.KindDot) {
+		p.termKind(parsetree.KindSchemaName)
+		p.term(token.KindDot)
 	}
+	p.termKind(parsetree.KindTriggerName, token.KindIdentifier)
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindTriggerName, p.tok[0]))
-		p.advance()
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing trigger name`)))
-	}
-
-	return nt
+	return p.popTree()
 }
 
 // dropView parses a drop view statement.

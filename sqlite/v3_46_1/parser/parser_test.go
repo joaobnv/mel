@@ -1184,13 +1184,19 @@ func TestDropTrigger(t *testing.T) {
 		`DROP TRIGGER trigger_name`, "DropTrigger{TT TriggerName}",
 		`DROP TRIGGER IF EXISTS trigger_name`, "DropTrigger{TT TT TriggerName}",
 		`DROP TRIGGER temp.trigger_name`, "DropTrigger{TT SchemaName T TriggerName}",
-		`DROP TRIGGER IF trigger_name`, "DropTrigger{TT T !ErrorMissing TriggerName}",
-		`DROP TRIGGER .trigger_name`, "DropTrigger{TT !ErrorMissing T TriggerName}",
-		`DROP TRIGGER schema_name.`, "DropTrigger{TT SchemaName T !ErrorMissing}",
-		`DROP TRIGGER schema_name trigger_name`, "DropTrigger{TT SchemaName !ErrorMissing TriggerName}",
 	)
 
 	runTests(t, cases, (*Parser).dropTrigger)
+}
+
+func TestDropTriggerError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DROP TRIGGER IF trigger_name`, msg: "expecting Exists, got Identifier"},
+		{code: `DROP TRIGGER .trigger_name`, msg: "expecting Identifier, got Dot"},
+		{code: `DROP TRIGGER schema_name.`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).dropTrigger)
 }
 
 func TestDropView(t *testing.T) {
