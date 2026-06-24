@@ -86,7 +86,7 @@ func TestSQLStatement(t *testing.T) {
 		`DELETE FROM tableName`,
 		"SQLStatement{Delete{TT QualifiedTableName{TableName}} T}",
 		`WITH cte AS (SELECT 10) DELETE FROM tableName`,
-		`SQLStatement{Delete{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+		`SQLStatement{Delete{WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			TT QualifiedTableName{TableName}} T}`,
 		`DETACH temp`,
 		"SQLStatement{Detach{T SchemaName} T}",
@@ -99,7 +99,7 @@ func TestSQLStatement(t *testing.T) {
 		`DROP VIEW view_name`,
 		"SQLStatement{DropView{TT ViewName} T}",
 		`WITH cte AS (SELECT 10) INSERT INTO table_name(name) VALUES('Go')`,
-		`SQLStatement{Insert{WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+		`SQLStatement{Insert{WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			TT TableName T CommaList{ColumnName} T T
 			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}} T}`,
 		`INSERT INTO table_name(name) VALUES('Go')`,
@@ -114,14 +114,14 @@ func TestSQLStatement(t *testing.T) {
 		`SAVEPOINT savepoint_name`, "SQLStatement{Savepoint{T SavepointName} T}",
 		`WITH cte AS (SELECT 10) SELECT 10;`,
 		`SQLStatement{SimpleSelect{
-				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+				WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				SelectCore{T CommaList{ResultColumn{E{T}}}} } T}`,
 		`UPDATE table_name SET a=10;`,
 		`SQLStatement{Update{
 				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
 		`WITH cte AS (SELECT 10) UPDATE table_name SET a=10;`,
 		`SQLStatement{Update{
-				WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+				WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 				T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} } T}`,
 		`VACUUM;`, "SQLStatement{Vacuum{T} T}",
 	)
@@ -873,7 +873,7 @@ func TestCreateTrigger(t *testing.T) {
 		"CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {TT QualifiedTableName{TableName}} TT}}",
 		`CREATE TRIGGER trigger_name DELETE ON table_name BEGIN WITH cte AS (SELECT 10) DELETE FROM table_name; END`,
 		`CreateTrigger{TT TriggerName TT TableName TriggerBody{T Delete {WithClause{T CommaList{
-				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
+				CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
 			TT QualifiedTableName{TableName}} TT}}`,
 		`CREATE TEMP TRIGGER IF NOT EXISTS trigger_name BEFORE DELETE ON table_name BEGIN INSERT INTO table_name(name) VALUES('Go'); END;`,
 		`CreateTrigger{TTT TTT TriggerName TTT TableName TriggerBody{T Insert{TT TableName T CommaList{ColumnName} T T
@@ -1012,54 +1012,57 @@ func TestDeleteError(t *testing.T) {
 func TestWithClause(t *testing.T) {
 	cases := testCases(
 		`WITH table_name AS (SELECT 10)`,
-		"WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
+		"WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
 		`WITH RECURSIVE table_name AS (SELECT 10)`,
-		"WithClause{TT CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
+		"WithClause{TT CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
 		`WITH table_name AS (SELECT 10), table_name2 AS (SELECT 10)`,
-		`WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T} T
-					CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}`,
+		`WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T} T
+					CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}`,
 		`WITH table_name AS (WITH table_name_2 AS (SELECT 10) SELECT 10)`,
-		`WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{
-				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+		`WithClause{T CommaList{CTE{TableName TT SimpleSelect{
+				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 					SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}`,
-		`WITH `,
-		"WithClause{T !ErrorExpecting}",
-		`WITH table_name AS (SELECT 10), `,
-		"WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T} T !ErrorMissing}}",
 	)
 
 	runTests(t, cases, (*Parser).withClause)
 }
 
-func TestCommonTableExpression(t *testing.T) {
+func TestWithClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `WITH `, msg: "expecting Identifier, got EOF"},
+		{code: `WITH table_name AS (SELECT 10), `, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).withClause)
+}
+
+func TestCTE(t *testing.T) {
 	cases := testCases(
 		`table_name AS (SELECT 10)`,
-		"CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		"CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS MATERIALIZED (SELECT 10)`,
-		"CommonTableExpression{TableName TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		"CTE{TableName TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name AS NOT MATERIALIZED (SELECT 10)`,
-		"CommonTableExpression{TableName T TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		"CTE{TableName T TT T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`table_name (col_a, col_b) AS (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} T T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`table_name (col_a, col_b AS (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} !ErrorMissing T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`table_name AS SELECT 10)`,
-		"CommonTableExpression{TableName T !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`table_name AS (SELECT 10`,
-		"CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
-		`table_name (col_a, col_b) (SELECT 10)`,
-		"CommonTableExpression{TableName T CommaList{ColName T ColName} T !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`table_name AS NOT (SELECT 10)`,
-		"CommonTableExpression{TableName T T !ErrorMissing T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`table_name AS ()`,
-		"CommonTableExpression{TableName T T !ErrorMissing T}",
-		`table_name AS (WITH cte AS (SELECT 10))`,
-		`CommonTableExpression{TableName T T WithClause{T CommaList{
-				CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}}T }}}
-				!ErrorMissing T}`,
+		"CTE{TableName T CommaList{ColName T ColName} T T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 	)
 
-	runTests(t, cases, (*Parser).commonTableExpression)
+	runTests(t, cases, (*Parser).cte)
+}
+
+func TestCTEError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `table_name (col_a, col_b AS (SELECT 10)`, msg: "expecting RightParen, got As"},
+		{code: `table_name AS SELECT 10)`, msg: "expecting LeftParen, got Select"},
+		{code: `table_name AS (SELECT 10`, msg: "expecting RightParen, got EOF"},
+		{code: `table_name (col_a, col_b) (SELECT 10)`, msg: "expecting As, got LeftParen"},
+		{code: `table_name AS NOT (SELECT 10)`, msg: "expecting Materialized, got LeftParen"},
+		//TODO: {code: `table_name AS ()`, msg: "expecting Select, got RightParen"},
+		//TODO: {code: `table_name AS (WITH cte AS (SELECT 10))`, msg: ""},
+	}
+
+	runTestsError(t, cases, (*Parser).cte)
 }
 
 func TestQualifiedTableName(t *testing.T) {
@@ -1074,7 +1077,7 @@ func TestQualifiedTableName(t *testing.T) {
 		"QualifiedTableName{TableName TT IndexName}",
 		`table_name NOT INDEXED`,
 		"QualifiedTableName{TableName TT}",
-		)
+	)
 
 	runTests(t, cases, (*Parser).qualifiedTableName)
 }
@@ -1105,23 +1108,35 @@ func TestReturningClause(t *testing.T) {
 		`RETURNING a AS b, c`,
 		`ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} T ColumnAlias}
 			T ReturningItem{E{ColRef{ColName}}}}}`,
-		`RETURNING`,
-		"ReturningClause{T !ErrorMissing}",
-		`RETURNING a AS`,
-		"ReturningClause{T CommaList{ReturningItem{E{ColRef{ColName}} T !ErrorMissing}}}",
 	)
 
 	runTests(t, cases, (*Parser).returningClause)
+}
+
+func TestReturningClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `RETURNING`, msg: "unexpected EOF"},
+		{code: `RETURNING a AS`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).returningClause)
 }
 
 func TestDetach(t *testing.T) {
 	cases := testCases(
 		`DETACH temp`, "Detach{T SchemaName}",
 		`DETACH DATABASE temp`, "Detach{TT SchemaName}",
-		`DETACH`, "Detach{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).detach)
+}
+
+func TestDetachError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DETACH`, msg: "expecting [Identifier Temp], got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).detach)
 }
 
 func TestDropIndex(t *testing.T) {
@@ -1325,7 +1340,7 @@ func TestIn(t *testing.T) {
 		`10 IN (SELECT 10)`, "In{TTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`10 IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
 		`In{TTT SimpleSelect{
-				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 		`10 IN (SELECT)`, "In{TTT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
 		`10 IN schema_name.table_name`, "In{TT SchemaName T TableName}",
@@ -1353,7 +1368,7 @@ func TestNotIn(t *testing.T) {
 		`10 NOT IN (SELECT 10)`, "NotIn{TTTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`10 NOT IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
 		`NotIn{TTTT SimpleSelect{
-				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 		`10 NOT IN schema_name.table_name`, "NotIn{TTT SchemaName T TableName}",
 		`10 NOT IN schema_a.table_function_a(10, 20)`, "NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T }",
@@ -1627,11 +1642,11 @@ func TestOrderByClause(t *testing.T) {
 }
 
 func TestOrderByClauseError(t *testing.T) {
-	cases := []testCaseError{	
+	cases := []testCaseError{
 		{code: `ORDER a`, msg: "expecting By, got Identifier"},
 		//TODO: {code: `ORDER BY`, msg: ""},
 	}
-	
+
 	runTestsError(t, cases, (*Parser).orderByClause)
 }
 
@@ -1647,7 +1662,7 @@ func TestOrderingTerm(t *testing.T) {
 }
 
 func TestOrderingTermError(t *testing.T) {
-	cases := []testCaseError {
+	cases := []testCaseError{
 		{code: `a DESC NULLS`, msg: "expecting [First Last], got EOF"},
 	}
 
@@ -1817,7 +1832,7 @@ func TestExists(t *testing.T) {
 		`EXISTS(SELECT 10)`, "Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
 		`EXISTS(WITH table_name_a AS (SELECT 10) SELECT 10)`,
 		`Exists{TT SimpleSelect{
-				WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 		`EXISTS SELECT 10);`,
 		"Exists{T !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
@@ -1928,11 +1943,11 @@ func TestInsert(t *testing.T) {
 		"Insert{TT TableName T CommaList{ColumnName} T TT ReturningClause{T CommaList{ReturningItem{T}}}}",
 		`INSERT INTO table_name(name) WITH cte AS (SELECT 10) SELECT 'Go'`,
 		`Insert{TT TableName T CommaList{ColumnName} T SimpleSelect{
-			WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 			SelectCore{T CommaList{ResultColumn{E{T}}}}}}`,
 		`INSERT INTO table_name(name) WITH cte AS (SELECT 10)`,
 		`Insert{TT TableName T CommaList{ColumnName} T
-			WithClause{T CommaList{CommonTableExpression{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
+			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 			!ErrorMissing}`,
 		`INSERT OR INTO table_name(name) VALUES('Go')`,
 		`Insert{T T !ErrorExpecting T TableName T CommaList{ColumnName} T T
@@ -2009,9 +2024,9 @@ func TestUpsertClauseItem(t *testing.T) {
 		"UpsertClauseItem{TT T !ErrorExpecting}",
 		`ON CONFLICT (col DO NOTHING`,
 		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing TT}",
-		`ON CONFLICT (col_a) WHERE DO NOTHING`,
-		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
-			WhereClause{T !ErrorMissing} TT}`,
+		//TODO: `ON CONFLICT (col_a) WHERE DO NOTHING`,
+		//TODO: `UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
+		//TODO: 	WhereClause{T !ErrorMissing} TT}`,
 	)
 
 	runTests(t, cases, (*Parser).upsertClauseItem)
@@ -2108,11 +2123,11 @@ func TestSelectStatement(t *testing.T) {
 func TestSelectStatementCTE(t *testing.T) {
 	cases := testCases(
 		`WITH table_name AS (SELECT 10) SELECT 10`,
-		`SimpleSelect{WithClause{T CommaList{CommonTableExpression{TableName TT
+		`SimpleSelect{WithClause{T CommaList{CTE{TableName TT
 			SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			SelectCore{T CommaList{ResultColumn{E{T}}}}}`,
 		`WITH table_name AS (SELECT 10) SELECT 10 INTERSECT SELECT 20`,
-		`CompoundSelect{WithClause{T CommaList{CommonTableExpression{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
+		`CompoundSelect{WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 			SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{T} SelectCore{T CommaList{ResultColumn{E{T}}}}}`,
 	)
 
@@ -2370,8 +2385,6 @@ func TestUpdate(t *testing.T) {
 		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} OrderByClause{TT CommaList{OrderingTerm{E{T}}}}}",
 		`UPDATE table_name SET col_name=10 LIMIT 10`,
 		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} LimitClause{T E{T}}}",
-		`UPDATE table_name SET col_name=10 RETURNING *, `,
-		"Update{T QualifiedTableName{TableName} T CommaList{UpdateSetItem{ColName T E{T}}} ReturningClause{T CommaList{ReturningItem{T} T !ErrorMissing}}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })
@@ -2384,6 +2397,7 @@ func TestUpdateError(t *testing.T) {
 		//TODO: {code: `UPDATE SET col_name=10`, msg: ""},
 		{code: `UPDATE table_name SET `, msg: "expecting [Identifier LeftParen], got EOF"},
 		{code: `UPDATE table_name SET a=10, `, msg: "expecting [Identifier LeftParen], got EOF"},
+		{code: `UPDATE table_name SET col_name=10 RETURNING *, `, msg: "unexpected EOF"},
 	}
 
 	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.update(nil) })

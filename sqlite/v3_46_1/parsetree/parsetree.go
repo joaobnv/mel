@@ -38,7 +38,6 @@ const (
 	KindColumnReference
 	KindCommaList
 	KindCommit
-	KindCommonTableExpression
 	KindCompoundOperator
 	KindCompoundSelect
 	KindConcatenate
@@ -49,6 +48,7 @@ const (
 	KindCreateTrigger
 	KindCreateView
 	KindCreateVirtualTable
+	KindCTE
 	KindDefaultColumnConstraint
 	KindDelete
 	KindDetach
@@ -88,8 +88,8 @@ const (
 	KindGroupByClause
 	KindHavingClause
 	KindIn
-	KindIndexName
 	KindIndexedColumn
+	KindIndexName
 	KindInsert
 	KindInsertValuesItem
 	KindInsertValuesList
@@ -119,10 +119,10 @@ const (
 	KindNotIn
 	KindNotLike
 	KindNotMatch
+	KindNotnull
 	KindNotNull
 	KindNotNullColumnConstraint
 	KindNotRegexp
-	KindNotnull
 	KindOr
 	KindOrderByClause
 	KindOrderingTerm
@@ -147,7 +147,6 @@ const (
 	KindReturningItem
 	KindRightShift
 	KindRollback
-	KindSQLStatement
 	KindSavepoint
 	KindSavepointName
 	KindSchemaIndexOrTableName
@@ -155,6 +154,7 @@ const (
 	KindSelectCore
 	KindSimpleSelect
 	KindSkipped
+	KindSQLStatement
 	KindSubtract
 	KindTableAlias
 	KindTableConstraint
@@ -199,19 +199,19 @@ func (k Kind) String() string {
 var kindStrings = []string{
 	"Add", "AddColumn", "AlterTable", "Analyze", "And", "Attach", "Begin", "Between", "BindParameter", "BitAnd", "BitNot", "BitOr", "Case", "Cast",
 	"CheckColumnConstraint", "CheckTableConstraint", "Collate", "CollateColumnConstraint", "CollationName", "CollationTableOrIndexName", "ColumnAlias",
-	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "CommonTableExpression", "CompoundOperator",
+	"ColumnConstraint", "ColumnDefinition", "ColumnName", "ColumnReference", "CommaList", "Commit", "CompoundOperator",
 	"CompoundSelect", "Concatenate", "ConflictClause", "ConstraintName", "CreateIndex", "CreateTable", "CreateTrigger", "CreateView", "CreateVirtualTable",
-	"DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable", "DropTrigger", "DropView", "Else", "Equal",
+	"CTE", "DefaultColumnConstraint", "Delete", "Detach", "Divide", "DropColumn", "DropIndex", "DropTable", "DropTrigger", "DropView", "Else", "Equal",
 	"ErrorExpecting", "ErrorMessage", "ErrorMissing", "ErrorUnexpectedEOF", "Exists", "Explain", "ExplainQueryPlan", "Expression", "Extract1", "Extract2",
 	"FileName", "FilterClause", "ForeignKeyClause", "ForeignKeyColumnConstraint", "ForeignKeyTableConstraint", "FrameSpec", "FrameSpecBetween", "FromClause",
 	"FunctionArguments", "FunctionCall", "FunctionName", "GeneratedColumnConstraint", "Glob", "GreaterThan", "GreaterThanOrEqual", "GroupByClause",
-	"HavingClause", "In", "IndexName", "IndexedColumn", "Insert", "InsertValuesItem", "InsertValuesList", "Is", "IsDistinctFrom", "IsNot",
+	"HavingClause", "In", "IndexedColumn", "IndexName", "Insert", "InsertValuesItem", "InsertValuesList", "Is", "IsDistinctFrom", "IsNot",
 	"IsNotDistinctFrom", "Isnull", "JoinClause", "JoinConstraint", "JoinOperator", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "LimitClause",
 	"Match", "Mod", "ModuleArgument", "ModuleName", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch",
-	"NotNull", "NotNullColumnConstraint", "NotRegexp", "Notnull", "Or", "OrderByClause", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy",
+	"Notnull", "NotNull", "NotNullColumnConstraint", "NotRegexp", "Or", "OrderByClause", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy",
 	"Pragma", "PragmaName", "PragmaValue", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName", "Raise",
-	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback", "SQLStatement",
-	"Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "Subtract", "TableAlias",
+	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback",
+	"Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "SQLStatement", "Subtract", "TableAlias",
 	"TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "TableOrSubquery", "Token", "TriggerBody", "TriggerName",
 	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpdateSetItem", "UpsertClause", "UpsertClauseItem", "Vacuum", "ValuesClause",
 	"ValuesItem", "ViewName", "When", "WhereClause", "WindowClause", "WindowClauseItem", "WindowDefinition", "WindowName", "WithClause",
