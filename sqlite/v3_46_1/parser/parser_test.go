@@ -1204,13 +1204,19 @@ func TestDropView(t *testing.T) {
 		`DROP VIEW view_name`, "DropView{TT ViewName}",
 		`DROP VIEW IF EXISTS view_name`, "DropView{TT TT ViewName}",
 		`DROP VIEW temp.view_name`, "DropView{TT SchemaName T ViewName}",
-		`DROP VIEW IF view_name`, "DropView{TT T !ErrorMissing ViewName}",
-		`DROP VIEW .view_name`, "DropView{TT !ErrorMissing T ViewName}",
-		`DROP VIEW schema_name.`, "DropView{TT SchemaName T !ErrorMissing}",
-		`DROP VIEW schema_name view_name`, "DropView{TT SchemaName !ErrorMissing ViewName}",
 	)
 
 	runTests(t, cases, (*Parser).dropView)
+}
+
+func TestDropViewError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DROP VIEW IF view_name`, msg: "expecting Exists, got Identifier"},
+		{code: `DROP VIEW .view_name`, msg: "expecting Identifier, got Dot"},
+		{code: `DROP VIEW schema_name.`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).dropView)
 }
 
 func TestExpression(t *testing.T) {
