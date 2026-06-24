@@ -1144,13 +1144,19 @@ func TestDropIndex(t *testing.T) {
 		`DROP INDEX index_name`, "DropIndex{TT IndexName}",
 		`DROP INDEX IF EXISTS index_name`, "DropIndex{TT TT IndexName}",
 		`DROP INDEX temp.index_name`, "DropIndex{TT SchemaName T IndexName}",
-		`DROP INDEX IF index_name`, "DropIndex{TT T !ErrorMissing IndexName}",
-		`DROP INDEX .index_name`, "DropIndex{TT !ErrorMissing T IndexName}",
-		`DROP INDEX schema_name.`, "DropIndex{TT SchemaName T !ErrorMissing}",
-		`DROP INDEX schema_name index_name`, "DropIndex{TT SchemaName !ErrorMissing IndexName}",
 	)
 
 	runTests(t, cases, (*Parser).dropIndex)
+}
+
+func TestDropIndexError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `DROP INDEX IF index_name`, msg: "expecting Exists, got Identifier"},
+		{code: `DROP INDEX .index_name`, msg: "expecting Identifier, got Dot"},
+		{code: `DROP INDEX schema_name.`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).dropIndex)
 }
 
 func TestDropTable(t *testing.T) {
