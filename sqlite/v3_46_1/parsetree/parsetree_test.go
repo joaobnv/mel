@@ -70,5 +70,11 @@ func TestKindString(t *testing.T) {
 func TestKindStringsIsSorted(t *testing.T) {
 	if !slices.IsSorted(kindStrings) {
 		t.Error("kindStrings isn't sorted")
+		for i := range kindStrings[:len(kindStrings)-1] {
+			if kindStrings[i] > kindStrings[i+1] {
+				t.Logf("%q > %q", kindStrings[i], kindStrings[i+1])
+				break
+			} 
+		}
 	}
 }

@@ -324,6 +324,7 @@ func (l *Lexer) string() *token.Token {
 	return token.New(lexeme, token.KindString)
 }
 
+// BUG: number starting with '0' causes a panic.
 // numeric scans a numeric literal.
 func (l *Lexer) numeric() *token.Token {
 	offsetStart := l.r.getOffset()

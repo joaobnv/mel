@@ -131,7 +131,7 @@ func TestSQLStatement(t *testing.T) {
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
 			defer func() {
 				switch v := recover().(type) {
-				case error:
+				case *syntaxError:
 					t.Fatalf("%d=>%q\n\t%s", i, c.code, v)
 				case nil:
 				default:
@@ -363,7 +363,7 @@ func TestCheckColumnConstraint(t *testing.T) {
 func TestCheckColumnConstraintError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `CHECK a > 10)`, msg: "expecting LeftParen, got Identifier"},
-		{code: `CHECK()`, msg: "expecting RightParen, got EOF"},
+		{code: `CHECK()`, msg: "unexpected RightParen"},
 		{code: `CHECK(a > 10`, msg: "expecting RightParen, got EOF"},
 	}
 
@@ -386,7 +386,7 @@ func TestDefaultColumnConstraint(t *testing.T) {
 func TestDefaultColumnConstraintError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `DEFAULT a`, msg: "expecting [Plus Minus], got Identifier"},
-		{code: `DEFAULT()`, msg: "expecting RightParen, got EOF"},
+		{code: `DEFAULT()`, msg: "unexpected RightParen"},
 		{code: `DEFAULT(a > 10`, msg: "expecting RightParen, got EOF"},
 		{code: `DEFAULT -a`, msg: "expecting Numeric, got Identifier"},
 	}
@@ -428,7 +428,7 @@ func TestGeneratedColumnConstraintError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `GENERATED AS (10)`, msg: "expecting Always, got As"},
 		{code: `GENERATED ALWAYS (10)`, msg: "expecting As, got LeftParen"},
-		{code: `AS ()`, msg: "expecting RightParen, got EOF"},
+		{code: `AS ()`, msg: "unexpected RightParen"},
 		{code: `AS 10)`, msg: "expecting LeftParen, got Numeric"},
 		{code: `AS (10`, msg: "expecting RightParen, got EOF"},
 	}
@@ -544,8 +544,8 @@ func TestAttach(t *testing.T) {
 
 func TestAttachError(t *testing.T) {
 	cases := []testCaseError{
-		{code: `ATTACH ;`, msg: "expecting As, got EOF"},
-		{code: `ATTACH AS ;`, msg: "expecting As, got Semicolon"},
+		{code: `ATTACH ;`, msg: "unexpected Semicolon"},
+		{code: `ATTACH AS ;`, msg: "unexpected As"},
 		{code: `ATTACH ':memory' schema_name ;`, msg: "expecting As, got Identifier"},
 	}
 
@@ -699,9 +699,12 @@ func TestCreateTable(t *testing.T) {
 			ColConstr {PrimaryKeyColumnConstraint{TT}} }} T}`,
 		`CREATE TABLE table_a (column_b) WITHOUT ROWID`,
 		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T CommaList{TableOption{TT}}}`,
-		`CREATE TABLE table_a (column_b, CONSTRAINT cons_name CHECK(column_b > 10)) WITHOUT ROWID`,
+		`CREATE TABLE table_a (column_b, CONSTRAINT cons_name CHECK(column_b > 10), PRIMARY KEY (column_b)) WITHOUT ROWID`,
 		`CreateTable {TT TableName T CommaList{ColDef{ColName}} T
-			CommaList{TableConstraint{T ConstraintName CheckTableConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}}}
+			CommaList{
+				TableConstraint{T ConstraintName CheckTableConstraint{TT E{GreaterThan{ColRef{ColName} TT}} T}} T
+				TableConstraint{PrimaryKeyTableConstraint{TTT CommaList{IndexedColumn{ColName}} T}}
+			}
 			T CommaList{TableOption{TT}}}`,
 	)
 
@@ -976,6 +979,7 @@ func TestCreateVirtualTableError(t *testing.T) {
 		{code: `CREATE VIRTUAL TABLE table_name USING`, msg: "expecting Identifier, got EOF"},
 		{code: `CREATE VIRTUAL TABLE table_name USING module_name()`, msg: "unexpected RightParen"},
 		{code: `CREATE VIRTUAL TABLE table_name USING module_name(function(function(`, msg: "unexpected EOF"},
+		{code: `CREATE VIRTUAL TABLE table_name USING module_name(function`, msg: "unexpected EOF"},
 	}
 
 	runTestsError(t, cases, (*Parser).createVirtualTable)
@@ -993,6 +997,8 @@ func TestDelete(t *testing.T) {
 		"Delete{TT QualifiedTableName{TableName} OrderByClause{TT CommaList{OrderingTerm{E{T}}}}}",
 		`DELETE FROM table_name LIMIT 10`,
 		"Delete{TT QualifiedTableName{TableName} LimitClause{T E{T}}}",
+		`DELETE FROM table_name ORDER BY 20, 30`,
+		"Delete{TT QualifiedTableName{TableName} OrderByClause{TT CommaList{OrderingTerm{E{T}} T OrderingTerm{E{T}}}}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
@@ -1222,6 +1228,10 @@ func TestDropViewError(t *testing.T) {
 func TestExpression(t *testing.T) {
 	cases := testCases(
 		`TRUE OR TRUE`, "E{Or{TTT}}",
+		`NOT 'a' NOT LIKE 1`, "E{Not{T NotLike{TTTT}}}",
+		`(NOT 'a') NOT LIKE 1`, "E{NotLike{ParenE{T CommaList{E{Not{TT}}} T} TTT}}",
+		`0 AND 1 LIKE 1;`, "E{And{TT Like{TTT}}}",
+		`(0 AND 1) LIKE 1;`, "E{Like{ParenE{T CommaList{E{And{TTT}}} T} TT}}",
 	)
 
 	runTests(t, cases, (*Parser).expression)
@@ -1229,189 +1239,372 @@ func TestExpression(t *testing.T) {
 
 func TestExpression1(t *testing.T) {
 	cases := testCases(
-		`TRUE OR TRUE`, "Or{TTT}",
-		`TRUE OR`, "Or{TT !ErrorMissing}",
+		`TRUE OR TRUE`, "E{Or{TTT}}",
 	)
 
-	runTests(t, cases, (*Parser).expression1)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression1Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `TRUE OR`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression2(t *testing.T) {
 	cases := testCases(
-		`TRUE AND TRUE`, "And{TTT}",
-		`TRUE AND`, "And{TT !ErrorMissing}",
+		`TRUE AND TRUE`, "E{And{TTT}}",
 	)
 
-	runTests(t, cases, (*Parser).expression2)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression2Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `TRUE AND`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression3(t *testing.T) {
 	cases := testCases(
-		`NOT TRUE`, "Not{TT}",
-		`NOT`, "Not{T !ErrorMissing}",
+		`NOT TRUE`, "E{Not{TT}}",
 	)
 
-	runTests(t, cases, (*Parser).expression3)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression3Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `NOT`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression4(t *testing.T) {
 	cases := testCases(
-		`a = c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
-		`a == c`, "Equal{ColRef{ColName} T ColRef{ColName}}",
-		`a <> c`, "NotEqual{ColRef{ColName} T ColRef{ColName}}",
-		`a != c`, "NotEqual{ColRef{ColName} T ColRef{ColName}}",
-		`10 REGEXP '10'`, "Regexp{TTT}",
-		`'10' NOT REGEXP '20'`, "NotRegexp{TTTT}",
-		`'10' LIKE '20'`, "Like{TTT}",
-		`10 LIKE '10' ESCAPE '!'`, "Like{TTTTT}",
-		`'10' NOT LIKE '20' ESCAPE '!'`, "NotLike{TTTTTT}",
-		`'10' GLOB '20'`, "Glob{TTT}",
-		`10 NOT GLOB '10'`, "NotGlob{TTTT}",
-		`'10' MATCH '20'`, "Match{TTT}",
-		`10 NOT MATCH '10'`, "NotMatch{TTTT}",
-		`10 IS '10'`, "Is{TTT}",
-		`10 BETWEEN 5 AND 15`, "Between{TTTTT}",
-		`10 NOT BETWEEN 5 AND 15`, "NotBetween{TTTTTT}",
-		`10 IN (5)`, "In{TTT CommaList{T} T}",
-		`10 NOT IN (5)`, "NotIn{TTTT CommaList{T} T}",
-		`10 ISNULL`, "Isnull{TT}",
-		`10 NOTNULL`, "Notnull{TT}",
-		`10 NOT NULL`, "NotNull{TTT}",
-		`10 ==`, "Equal{TT !ErrorMissing}",
-		`10 <>`, "NotEqual{TT !ErrorMissing}",
-		`10 GLOB`, "Glob{TT !ErrorMissing}",
-		`10 REGEXP`, "Regexp{TT !ErrorMissing}",
-		`10 MATCH`, "Match{TT !ErrorMissing}",
-		`10 LIKE ESCAPE`, "Like{TT !ErrorMissing T !ErrorMissing}",
-		`10 NOT GLOB`, "NotGlob{TTT !ErrorMissing}",
-		`10 NOT REGEXP`, "NotRegexp{TTT !ErrorMissing}",
-		`10 NOT MATCH`, "NotMatch{TTT !ErrorMissing}",
-		`10 NOT LIKE ESCAPE`, "NotLike{TTT !ErrorMissing T !ErrorMissing}",
-		`10 IN table_function_name(10`, "In{TT TableFunctionName T CommaList{T} !ErrorMissing}",
-		`10 NOT IN table_function_name(10`, "NotIn{TTT TableFunctionName T CommaList{T} !ErrorMissing}",
+		`a = c`, "E{Equal{ColRef{ColName} T ColRef{ColName}}}",
+		`a == c`, "E{Equal{ColRef{ColName} T ColRef{ColName}}}",
+		`a <> c`, "E{NotEqual{ColRef{ColName} T ColRef{ColName}}}",
+		`a != c`, "E{NotEqual{ColRef{ColName} T ColRef{ColName}}}",
+		`10 REGEXP '10'`, "E{Regexp{TTT}}",
+		`'10' NOT REGEXP '20'`, "E{NotRegexp{TTTT}}",
+		`'10' LIKE '20'`, "E{Like{TTT}}",
+		`10 LIKE '10' ESCAPE '!'`, "E{Like{TTTTT}}",
+		`'10' NOT LIKE '20' ESCAPE '!'`, "E{NotLike{TTTTTT}}",
+		`'10' GLOB '20'`, "E{Glob{TTT}}",
+		`10 NOT GLOB '10'`, "E{NotGlob{TTTT}}",
+		`'10' MATCH '20'`, "E{Match{TTT}}",
+		`10 NOT MATCH '10'`, "E{NotMatch{TTTT}}",
+		`10 IS '10'`, "E{Is{TTT}}",
+		`10 BETWEEN 5 AND 15`, "E{Between{TTTTT}}",
+		`10 NOT BETWEEN 5 AND 15`, "E{NotBetween{TTTTTT}}",
+		`10 IN (5)`, "E{In{TTT CommaList{E{T}} T}}",
+		`10 NOT IN (5)`, "E{NotIn{TTTT CommaList{E{T}} T}}",
+		`10 ISNULL`, "E{Isnull{TT}}",
+		`10 NOTNULL`, "E{Notnull{TT}}",
+		`10 NOT NULL`, "E{NotNull{TTT}}",
 	)
 
-	runTests(t, cases, (*Parser).expression4)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression4Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 ==`, msg: "unexpected EOF"},
+		{code: `10 <>`, msg: "unexpected EOF"},
+		{code: `10 GLOB`, msg: "unexpected EOF"},
+		{code: `10 NOT GLOB`, msg: "unexpected EOF"},
+		{code: `10 REGEXP`, msg: "unexpected EOF"},
+		{code: `10 NOT REGEXP`, msg: "unexpected EOF"},
+		{code: `10 MATCH`, msg: "unexpected EOF"},
+		{code: `10 NOT MATCH`, msg: "unexpected EOF"},
+		{code: `10 LIKE ESCAPE`, msg: "unexpected Escape"},
+		{code: `10 NOT LIKE ESCAPE`, msg: "unexpected Escape"},
+		{code: `10 IN table_function_name(10`, msg: "expecting RightParen, got EOF"},
+		{code: `10 NOT IN table_function_name(10`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestEqual(t *testing.T) {
+	cases := testCases(
+		`a = c`, "E{Equal{ColRef{ColName} T ColRef{ColName}}}",
+		`a = c = d`, "E{Equal{Equal{ColRef{ColName} T ColRef{ColName}} T ColRef{ColName}}}",
+		`a == c`, "E{Equal{ColRef{ColName} T ColRef{ColName}}}",
+		`a = c == d`, "E{Equal{Equal{ColRef{ColName} T ColRef{ColName}} T ColRef{ColName}}}",
+		`a = NOT d`, "E{Equal{ColRef{ColName} T Not{T ColRef{ColName}}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestEqualError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 =`, msg: "unexpected EOF"},
+		{code: `10 ==`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestNotEqual(t *testing.T) {
+	cases := testCases(
+		`a <> c`, "E{NotEqual{ColRef{ColName} T ColRef{ColName}}}",
+		`a <> NOT c`, "E{NotEqual{ColRef{ColName} T Not{T ColRef{ColName}}}}",
+		`a <> c = d`, "E{Equal{NotEqual{ColRef{ColName} T ColRef{ColName}} T ColRef{ColName}}}",
+		`a != c`, "E{NotEqual{ColRef{ColName} T ColRef{ColName}}}",
+		`a != NOT c`, "E{NotEqual{ColRef{ColName} T Not{T ColRef{ColName}}}}",
+		`a != c = d`, "E{Equal{NotEqual{ColRef{ColName} T ColRef{ColName}} T ColRef{ColName}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestNotEqualError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 <>`, msg: "unexpected EOF"},
+		{code: `10 !=`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestRegexp(t *testing.T) {
+	cases := testCases(
+		`10 REGEXP '10'`, "E{Regexp{TTT}}",
+		`1 REGEXP NOT 1`, "E{Regexp{TT Not{TT}}}",
+		`'10' NOT REGEXP '20'`, "E{NotRegexp{TTTT}}",
+		`1 NOT REGEXP NOT 1`, "E{NotRegexp{TTT Not{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestRegexpError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 REGEXP`, msg: "unexpected EOF"},
+		{code: `10 NOT REGEXP`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestLike(t *testing.T) {
+	cases := testCases(
+		`10 LIKE '10' ESCAPE '!'`, "E{Like{TTTTT}}",
+		`1 LIKE NOT 1`, "E{Like{TT Not{TT}}}",
+		`1 LIKE 1 ESCAPE NOT 1`, "E{Like{TTTT Not{TT}}}",
+		`'10' NOT LIKE '20' ESCAPE '!'`, "E{NotLike{TTTTTT}}",
+		`'10' NOT LIKE '20' ESCAPE NOT 1`, "E{NotLike{TTTTT Not{TT}}}",
+		`1 NOT LIKE NOT 1`, "E{NotLike{TTT Not{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestLikeError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 LIKE ESCAPE`, msg: "unexpected Escape"},
+		{code: `10 LIKE`, msg: "unexpected EOF"},
+		{code: `10 NOT LIKE ESCAPE`, msg: "unexpected Escape"},
+		{code: `10 NOT LIKE`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestGlob(t *testing.T) {
+	cases := testCases(
+		`'10' GLOB '20'`, "E{Glob{TTT}}",
+		`1 GLOB NOT 1`, "E{Glob{TT Not{TT}}}",
+		`10 NOT GLOB '10'`, "E{NotGlob{TTTT}}",
+		`1 NOT GLOB NOT 1`, "E{NotGlob{TTT Not{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestGlobError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 GLOB`, msg: "unexpected EOF"},
+		{code: `10 NOT GLOB`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestIsExpression(t *testing.T) {
 	cases := testCases(
 		`10 IS 10`,
-		"Is{TTT}",
+		"E{Is{TTT}}",
 		`10 IS DISTINCT FROM 10`,
-		"IsDistinctFrom{TTTTT}",
+		"E{IsDistinctFrom{TTTTT}}",
+		`10 IS DISTINCT FROM NOT 10`,
+		"E{IsDistinctFrom{TTTT Not{TT}}}",
 		`10 IS NOT 10`,
-		"IsNot{TTTT}",
+		"E{IsNot{TTTT}}",
+		`10 IS NOT NOT 10`,
+		"E{IsNot{TTT Not{TT}}}",
 		`10 IS NOT DISTINCT FROM 10`,
-		"IsNotDistinctFrom{TTTTTT}",
-		`10 IS NOT DISTINCT 10`, "IsNotDistinctFrom{TTTT !ErrorMissing T}",
-		`10 IS NOT DISTINCT FROM`, "IsNotDistinctFrom{TTTTT !ErrorMissing}",
-		`10 IS NOT`, "IsNot{TTT !ErrorExpecting}",
-		`10 IS DISTINCT FROM`, "IsDistinctFrom{TTTT !ErrorMissing}",
-		`10 IS DISTINCT 10`, "IsDistinctFrom{TTT !ErrorMissing T}",
-		`10 IS`, "Is{TT !ErrorExpecting}",
+		"E{IsNotDistinctFrom{TTTTTT}}",
+		`10 IS NOT DISTINCT FROM NOT 10`,
+		"E{IsNotDistinctFrom{TTTTT Not{TT}}}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		p.advance() // skip the 10
-		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
-		return p.isExpression(exp)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestIsExpressionError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 IS NOT DISTINCT 10`, msg: "expecting From, got Numeric"},
+		{code: `10 IS NOT DISTINCT FROM`, msg: "unexpected EOF"},
+		{code: `10 IS NOT`, msg: "unexpected EOF"},
+		{code: `10 IS DISTINCT FROM`, msg: "unexpected EOF"},
+		{code: `10 IS DISTINCT FROM NOT`, msg: "unexpected EOF"},
+		{code: `10 IS DISTINCT 10`, msg: "expecting From, got Numeric"},
+		{code: `10 IS`, msg: "unexpected EOF"},
 	}
 
-	runTests(t, cases, fn)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestBetween(t *testing.T) {
 	cases := testCases(
 		`10 BETWEEN 5 AND 15`,
-		`Between{TTTTT}`,
-		`10 BETWEEN`, "Between{TT !ErrorMissing}",
-		`10 BETWEEN AND 20`, "Between{TT !ErrorMissing TT}",
-		`10 BETWEEN 10  20`, "Between{TTT !ErrorMissing T}",
+		`E{Between{TTTTT}}`,
+		`10 BETWEEN NOT 5 AND NOT 15`,
+		`E{Between{TT Not{TT} T Not{TT}}}`,
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		p.advance() // skip the 10
-		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
-		return p.between(exp)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestBetweenError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 BETWEEN`, msg: "unexpected EOF"},
+		{code: `10 BETWEEN AND 20`, msg: "unexpected And"},
+		{code: `10 BETWEEN 10  20`, msg: "expecting And, got Numeric"},
 	}
 
-	runTests(t, cases, fn)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestNotBetween(t *testing.T) {
 	cases := testCases(
 		`10 NOT BETWEEN 5 AND 15`,
-		"NotBetween{TTTTTT}",
-		`10 NOT BETWEEN`, "NotBetween{TTT !ErrorMissing}",
-		`10 NOT BETWEEN AND 20`, "NotBetween{TTT !ErrorMissing TT}",
-		`10 NOT BETWEEN 10  20`, "NotBetween{TTTT !ErrorMissing T}",
+		"E{NotBetween{TTTTTT}}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		p.advance() // skip the 10
-		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
-		return p.notBetween(exp)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestNotBetweenError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 NOT BETWEEN`, msg: "unexpected EOF"},
+		{code: `10 NOT BETWEEN AND 20`, msg: "unexpected And"},
+		{code: `10 NOT BETWEEN 10  20`, msg: "expecting And, got Numeric"},
 	}
 
-	runTests(t, cases, fn)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestIn(t *testing.T) {
 	cases := testCases(
-		`10 IN (10, 20)`, "In{TTT CommaList{TTT} T}",
-		`10 IN ()`, "In{TTTT}",
-		`10 IN (SELECT 10)`, "In{TTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`10 IN (10, NOT 20)`, "E{In{TTT CommaList{E{T} T E{Not{TT}}} T}}",
+		`10 IN ()`, "E{In{TTTT}}",
+		`10 IN (SELECT 10)`, "E{In{TTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
 		`10 IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
-		`In{TTT SimpleSelect{
+		`E{In{TTT SimpleSelect{
 				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
-				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
-		`10 IN (SELECT)`, "In{TTT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
-		`10 IN schema_name.table_name`, "In{TT SchemaName T TableName}",
-		`10 IN schema_a.table_function_a(10, 20)`, "In{TT SchemaName T TableFunctionName T CommaList{TTT} T }",
-		`10 IN (ALTER)`, "In{TTT !ErrorExpecting Skipped{T} T}",
-		`10 IN (1`, "In{TTT CommaList{T} !ErrorMissing}",
-		`10 IN function()`, "In{TT TableFunctionName T !ErrorMissing T}",
-		`10 IN function(10`, "In{TT TableFunctionName T CommaList{T} !ErrorMissing}",
-		`10 IN ALTER`, `In{TT !ErrorExpecting}`,
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}`,
+		`10 IN (SELECT)`, "E{In{TTT SimpleSelect{SelectCore{T !ErrorMissing}} T}}",
+		`10 IN schema_name.table_name`, "E{In{TT SchemaName T TableName}}",
+		`10 IN schema_a.table_function_a(10, 20)`, "E{In{TT SchemaName T TableFunctionName T CommaList{TTT} T}}",
+		`10 IN MAX()`, "E{In{TT TableFunctionName TT}}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		p.advance() // skip the 10
-		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
-		return p.in(exp)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestInError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 IN (ALTER)`, msg: "expecting RightParen, got Alter"},
+		{code: `10 IN (1`, msg: "expecting RightParen, got EOF"},
+		{code: `10 IN function(10`, msg: "expecting RightParen, got EOF"},
+		{code: `10 IN ALTER`, msg: "expecting Identifier, got Alter"},
 	}
 
-	runTests(t, cases, fn)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestNotIn(t *testing.T) {
 	cases := testCases(
-		`10 NOT IN (10, 20)`, "NotIn{TTTT CommaList{TTT} T}",
-		`10 NOT IN ()`, "NotIn{TTTTT}",
-		`10 NOT IN (SELECT 10)`, "NotIn{TTTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`10 NOT IN (10, NOT 20)`, "E{NotIn{TTTT CommaList{E{T} T E{Not{TT}}} T}}",
+		`10 NOT IN ()`, "E{NotIn{TTTTT}}",
+		`10 NOT IN (SELECT 10)`, "E{NotIn{TTTT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
 		`10 NOT IN (WITH table_name_a AS (SELECT 10) SELECT 10)`,
-		`NotIn{TTTT SimpleSelect{
+		`E{NotIn{TTTT SimpleSelect{
 				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
-				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
-		`10 NOT IN schema_name.table_name`, "NotIn{TTT SchemaName T TableName}",
-		`10 NOT IN schema_a.table_function_a(10, 20)`, "NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T }",
-		`10 NOT IN table_a`, "NotIn{TTT TableName}",
-		`10 NOT IN (SELECT)`, "NotIn{TTTT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
-		`10 NOT IN (ALTER)`, "NotIn{TTTT !ErrorExpecting Skipped{T} T}",
-		`10 NOT IN (1`, `NotIn{TTTT CommaList{T} !ErrorMissing}`,
-		`10 NOT IN function()`, "NotIn{TTT TableFunctionName T !ErrorMissing T}",
-		`10 NOT IN function(10`, "NotIn{TTT TableFunctionName T CommaList{T} !ErrorMissing}",
-		`10 NOT IN ALTER`, `NotIn{TTT !ErrorExpecting}`,
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}`,
+		`10 NOT IN schema_name.table_name`, "E{NotIn{TTT SchemaName T TableName}}",
+		`10 NOT IN schema_a.table_function_a(10, 20)`, "E{NotIn{TTT SchemaName T TableFunctionName T CommaList{TTT} T}}",
+		`10 NOT IN MAX()`, "E{NotIn{TTT TableFunctionName TT}}",
+		`10 NOT IN table_a`, "E{NotIn{TTT TableName}}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		p.advance() // skip the 10
-		exp := parsetree.NewTerminal(parsetree.KindToken, token.New([]byte("10"), token.KindNumeric))
-		return p.notIn(exp)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestMatch(t *testing.T) {
+	cases := testCases(
+		`10 MATCH 10`, "E{Match{TTT}}",
+		`10 MATCH NOT 10`, "E{Match{TT Not{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestMatchError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 MATCH`, msg: "unexpected EOF"},
 	}
 
-	runTests(t, cases, fn)
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestNotMatch(t *testing.T) {
+	cases := testCases(
+		`10 NOT MATCH 10`, "E{NotMatch{TTTT}}",
+		`10 NOT MATCH NOT 10`, "E{NotMatch{TTT Not{TT}}}",
+	)
+
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestNotMatchError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 NOT MATCH`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
+}
+
+func TestNotInError(t *testing.T) {
+	cases := []testCaseError{
+		//TODO: {code: `10 NOT IN (SELECT)`, msg: "unexpected RightParen"},
+		{code: `10 NOT IN (ALTER)`, msg: "expecting RightParen, got Alter"},
+		{code: `10 NOT IN (1`, msg: "expecting RightParen, got EOF"},
+		{code: `10 NOT IN MAX(10`, msg: "expecting RightParen, got EOF"},
+		{code: `10 NOT IN ALTER`, msg: "expecting Identifier, got Alter"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestIsStartOfExpressionAtLeast4(t *testing.T) {
@@ -1430,7 +1623,8 @@ func TestIsStartOfExpressionAtLeast4(t *testing.T) {
 		p.advance()
 		p.advance()
 		p.advance()
-		if p.isStartOfExpressionAtLeast4(0) != c.result {
+		p.advance()
+		if p.isStartOfExpressionAtLeast4() != c.result {
 			t.Logf("isStartOfExpressionAtLeast4(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1439,95 +1633,144 @@ func TestIsStartOfExpressionAtLeast4(t *testing.T) {
 
 func TestExpression5(t *testing.T) {
 	cases := testCases(
-		`a < c`, "LessThan{ColRef{ColName} T ColRef{ColName}}",
-		`a <= c`, "LessThanOrEqual{ColRef{ColName} T ColRef{ColName}}",
-		`a > c`, "GreaterThan{ColRef{ColName} T ColRef{ColName}}",
-		`a >= c`, "GreaterThanOrEqual{ColRef{ColName} T ColRef{ColName}}",
-		`10 <`, "LessThan{TT !ErrorMissing}",
+		`a < c`, "E{LessThan{ColRef{ColName} T ColRef{ColName}}}",
+		`a <= c`, "E{LessThanOrEqual{ColRef{ColName} T ColRef{ColName}}}",
+		`a > c`, "E{GreaterThan{ColRef{ColName} T ColRef{ColName}}}",
+		`a >= c`, "E{GreaterThanOrEqual{ColRef{ColName} T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression5)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression5Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 <`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression6(t *testing.T) {
 	cases := testCases(
-		`a & c`, "BitAnd{ColRef{ColName} T ColRef{ColName}}",
-		`a | c`, "BitOr{ColRef{ColName} T ColRef{ColName}}",
-		`a << c`, "LeftShift{ColRef{ColName} T ColRef{ColName}}",
-		`a >> c`, "RightShift{ColRef{ColName} T ColRef{ColName}}",
-		`10 &`, "BitAnd{TT !ErrorMissing}",
+		`a & c`, "E{BitAnd{ColRef{ColName} T ColRef{ColName}}}",
+		`a | c`, "E{BitOr{ColRef{ColName} T ColRef{ColName}}}",
+		`a << c`, "E{LeftShift{ColRef{ColName} T ColRef{ColName}}}",
+		`a >> c`, "E{RightShift{ColRef{ColName} T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression6)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression6Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 &`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression7(t *testing.T) {
 	cases := testCases(
-		`a + c`, "Add{ColRef{ColName} T ColRef{ColName}}",
-		`a - c`, "Subtract{ColRef{ColName} T ColRef{ColName}}",
-		`10 +`, "Add{TT !ErrorMissing}",
+		`a + c`, "E{Add{ColRef{ColName} T ColRef{ColName}}}",
+		`a - c`, "E{Subtract{ColRef{ColName} T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression7)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression7Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 +`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression8(t *testing.T) {
 	cases := testCases(
-		`a * c`, "Multiply{ColRef{ColName} T ColRef{ColName}}",
-		`a / c`, "Divide{ColRef{ColName} T ColRef{ColName}}",
-		`a % c`, "Mod{ColRef{ColName} T ColRef{ColName}}",
-		`10 *`, "Multiply{TT !ErrorMissing}",
+		`a * c`, "E{Multiply{ColRef{ColName} T ColRef{ColName}}}",
+		`a / c`, "E{Divide{ColRef{ColName} T ColRef{ColName}}}",
+		`a % c`, "E{Mod{ColRef{ColName} T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression8)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression8Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 *`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression9(t *testing.T) {
 	cases := testCases(
-		`a || c`, "Concatenate{ColRef{ColName} T ColRef{ColName}}",
-		`a -> c`, "Extract1{ColRef{ColName} T ColRef{ColName}}",
-		`a ->> c`, "Extract2{ColRef{ColName} T ColRef{ColName}}",
-		`10 ||`, "Concatenate{TT !ErrorMissing}",
+		`a || c`, "E{Concatenate{ColRef{ColName} T ColRef{ColName}}}",
+		`a -> c`, "E{Extract1{ColRef{ColName} T ColRef{ColName}}}",
+		`a ->> c`, "E{Extract2{ColRef{ColName} T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression9)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression9Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 ||`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression10(t *testing.T) {
 	cases := testCases(
-		`a`, "ColRef{ColName}",
-		`a COLLATE c`, "Collate{ColRef{ColName} T CollationName}",
-		`10 COLLATE`, "Collate{TT !ErrorMissing}",
+		`a`, "E{ColRef{ColName}}",
+		`a COLLATE c`, "E{Collate{ColRef{ColName} T CollationName}}",
 	)
 
-	runTests(t, cases, (*Parser).expression10)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression10Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `10 COLLATE`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestExpression11(t *testing.T) {
 	cases := testCases(
-		`~a`, "BitNot{T ColRef{ColName}}",
-		`+a`, "PrefixPlus{T ColRef{ColName}}",
-		`-a`, "Negate{T ColRef{ColName}}",
-		`~`, "BitNot{T !ErrorMissing}",
+		`~a`, "E{BitNot{T ColRef{ColName}}}",
+		`+a`, "E{PrefixPlus{T ColRef{ColName}}}",
+		`-a`, "E{Negate{T ColRef{ColName}}}",
 	)
 
-	runTests(t, cases, (*Parser).expression11)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExpression11Error(t *testing.T) {
+	cases := []testCaseError{
+		{code: `~`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestSimpleExpression(t *testing.T) {
 	cases := testCases(
-		`a`, "ColRef{ColName}",
-		`?`, "BindParameter",
-		`function_name()`, "FunctionCall{FunctionName TT}",
-		`(10)`, "ParenE{T CommaList{E{T}} T}",
-		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
-		`NOT EXISTS (SELECT 10)`, "Not{T Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
-		`EXISTS (SELECT 10)`, "Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`CASE WHEN TRUE THEN 10 END`, "Case{T When{T E{T} T E{T}} T}",
-		`RAISE (IGNORE)`, "Raise{TTTT}",
+		`a`, "E{ColRef{ColName}}",
+		`?`, "E{BindParameter}",
+		`function_name()`, "E{FunctionCall{FunctionName T FnArgs{} T}}",
+		`(10)`, "E{ParenE{T CommaList{E{T}} T}}",
+		`CAST ('10' AS INTEGER)`, "E{Cast{TT E{T} T TypeName{T} T}}",
+		`NOT EXISTS (SELECT 10)`, "E{Not{T Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
+		`EXISTS (SELECT 10)`, "E{Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
+		`CASE WHEN TRUE THEN 10 END`, "E{Case{T When{T E{T} T E{T}} T}}",
+		`RAISE (IGNORE)`, "E{Raise{TTTT}}",
 	)
 
-	runTests(t, cases, (*Parser).simpleExpression)
+	runTests(t, cases, (*Parser).expression)
 }
 
 func TestIsStartOfExpression(t *testing.T) {
@@ -1538,7 +1781,19 @@ func TestIsStartOfExpression(t *testing.T) {
 		{tok: "10", result: true},
 		{tok: "?", result: true},
 		{tok: "a", result: true},
+		{tok: "TEMP", result: true},
+		{tok: "+", result: true},
+		{tok: "-", result: true},
+		{tok: "~", result: true},
+		{tok: "*", result: false},
+		{tok: "(", result: true},
+		{tok: "CAST", result: true},
+		{tok: "NOT", result: true},
+		{tok: "EXISTS", result: true},
+		{tok: "RAISE", result: true},
 		{tok: "SELECT", result: false},
+		{tok: ",", result: false},
+		{tok: "LIKE", result: false},
 	}
 
 	for _, c := range cases {
@@ -1546,7 +1801,8 @@ func TestIsStartOfExpression(t *testing.T) {
 		p.advance()
 		p.advance()
 		p.advance()
-		if p.isStartOfExpressionAtLeast4(0) != c.result {
+		p.advance()
+		if p.isStartOfExpression() != c.result {
 			t.Logf("isStartOfExpression(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1569,7 +1825,8 @@ func TestIsLiteralValue(t *testing.T) {
 		p.advance()
 		p.advance()
 		p.advance()
-		if p.isLiteralValue(0) != c.result {
+		p.advance()
+		if p.isLiteralValue() != c.result {
 			t.Logf("isLiteralValue(%s) == %v, want %v", c.tok, !c.result, c.result)
 			t.Fail()
 		}
@@ -1592,7 +1849,8 @@ func TestIsBindParameter(t *testing.T) {
 		p.advance()
 		p.advance()
 		p.advance()
-		if is := p.isBindParameter(0); is != c.result {
+		p.advance()
+		if is := p.isBindParameter(); is != c.result {
 			t.Logf("isBindParameter(%s) == %v, want %v", c.tok, is, c.result)
 			t.Fail()
 		}
@@ -1601,342 +1859,369 @@ func TestIsBindParameter(t *testing.T) {
 
 func TestColumnReference(t *testing.T) {
 	cases := testCases(
-		`a`, "ColRef{ColName}",
-		`a.a`, "ColRef{TableName T ColName}",
-		`a.a.a`, "ColRef{SchemaName T TableName T ColName}",
+		`a`, "E{ColRef{ColName}}",
+		`TEMP`, "E{ColRef{ColName}}",
+		`a.a`, "E{ColRef{TableName T ColName}}",
+		`TEMP.TEMP`, "E{ColRef{TableName T ColName}}",
+		`a.a.a`, "E{ColRef{SchemaName T TableName T ColName}}",
+		`TEMP.TEMP.TEMP`, "E{ColRef{SchemaName T TableName T ColName}}",
 	)
 
-	runTests(t, cases, (*Parser).columnReference)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestColumnReferenceError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `a.`, msg: "expecting [Identifier Temp], got EOF"},
+		{code: `TEMP.`, msg: "expecting [Identifier Temp], got EOF"},
+		{code: `a..a`, msg: "expecting [Identifier Temp], got Dot"},
+		{code: `TEMP..TEMP`, msg: "expecting [Identifier Temp], got Dot"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestFunctionCall(t *testing.T) {
 	cases := testCases(
-		`func()`,
-		"FnCall{FnName TT}",
-		`func('a')`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}}} T}",
-		`func('a') OVER window_name`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}}} T OverClause{T WindowName}}",
-		`function(;`,
-		"FnCall{FnName T !ErrorMissing}",
-		`function(;`,
-		"FnCall{FnName T !ErrorMissing}",
-		`function(DISTINCT );`,
-		"FnCall{FnName T FnArgs{T !ErrorMissing} T}",
-		`function() FILTER WHERE a);`,
-		"FnCall{FnName TT FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}}",
-		`function() FILTER (a);`,
-		"FnCall{FnName TT FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}}",
-		`function(10 ORDER BY a COLLATE);`,
-		"FnCall{FnName T FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{ OrderingTerm{E{Collate{ColRef{ColName} T !ErrorMissing}}}} }} T}",
+		`MAX()`,
+		"E{FnCall{FnName T FnArgs{} T}}",
+		`MAX('a')`,
+		"E{FnCall{FnName T FnArgs{CommaList{E{T}}} T}}",
+		`MAX('a') OVER window_name`,
+		"E{FnCall{FnName T FnArgs{CommaList{E{T}}} T OverClause{T WindowName}}}",
 	)
 
-	runTests(t, cases, (*Parser).functionCall)
+	runTests(t, cases, (*Parser).expression)
 }
 
 func TestFunctionCallError(t *testing.T) {
 	cases := []testCaseError{
-		{code: `function(10 ORDER a);`, msg: "expecting By, got Identifier"},
-		//TODO: {code: `function(10 ORDER BY);`, msg: ""},
-		{code: `function(10 ORDER BY a NULLS);`, msg: "expecting [First Last], got RightParen"},
+		{code: `MAX(10 ORDER a);`, msg: "expecting By, got Identifier"},
+		{code: `MAX(10 ORDER BY);`, msg: "unexpected RightParen"},
+		{code: `MAX(10 ORDER BY a NULLS);`, msg: "expecting [First Last], got RightParen"},
+		{code: `MAX(;`, msg: "expecting RightParen, got Semicolon"},
+		{code: `MAX(DISTINCT );`, msg: "unexpected RightParen"},
+		{code: `MAX() FILTER WHERE a);`, msg: "expecting LeftParen, got Where"},
+		{code: `MAX() FILTER (a);`, msg: "expecting Where, got Identifier"},
+		{code: `MAX(10 ORDER BY a COLLATE);`, msg: "expecting Identifier, got RightParen"},
 	}
 
-	runTestsError(t, cases, (*Parser).functionCall)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestFunctionArguments(t *testing.T) {
 	cases := testCases(
-		`'a'`, "FnArgs{CommaList{E{T}}}",
-		`DISTINCT 'a'`, "FnArgs{T CommaList{E{T}}}",
-		`'a' ORDER BY a`, "FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}}",
-		`*`, "FnArgs{T}",
-		``, "FnArgs{!ErrorMissing}",
+		`MAX('a')`, "E{FunctionCall{FunctionName T FnArgs{CommaList{E{T}}} T}}",
+		`MAX(DISTINCT 'a')`, "E{FunctionCall{FunctionName T FnArgs{T CommaList{E{T}}} T}}",
+		`MAX(DISTINCT 'a' ORDER BY a)`,
+		`E{FunctionCall{FunctionName T
+			FnArgs{T CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}}`,
+		`MAX('a' ORDER BY a)`,
+		`E{FunctionCall{FunctionName T
+			FnArgs{CommaList{E{T}} OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}}} T}}`,
+		`MAX(*)`, "E{FunctionCall{FunctionName T FnArgs{T} T}}",
+		`MAX()`, "E{FunctionCall{FunctionName T FnArgs{} T}}",
 	)
 
-	runTests(t, cases, (*Parser).functionArguments)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestFunctionArgumentsError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `MAX(DISTINCT)`, msg: "unexpected RightParen"},
+		{code: `MAX(ORDER BY a)`, msg: "expecting RightParen, got Order"},
+		{code: `MAX(DISTINCT *)`, msg: "unexpected Asterisk"},
+		{code: `MAX(* ORDER BY 10)`, msg: "expecting RightParen, got Order"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestOrderByClause(t *testing.T) {
 	cases := testCases(
-		`ORDER BY a COLLATE c`,
-		"OrderByClause{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}}",
+		`MAX() OVER (ORDER BY a COLLATE c)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			OrderByClause{TT CommaList{OrderingTerm{E{Collate{ColRef{ColName} T CollationName}}}}} T}}}}`,
 	)
 
-	runTests(t, cases, (*Parser).orderByClause)
+	runTests(t, cases, (*Parser).expression)
 }
 
 func TestOrderByClauseError(t *testing.T) {
 	cases := []testCaseError{
-		{code: `ORDER a`, msg: "expecting By, got Identifier"},
-		//TODO: {code: `ORDER BY`, msg: ""},
+		{code: `MAX() OVER (ORDER a)`, msg: "expecting By, got Identifier"},
+		{code: `MAX() OVER (ORDER BY)`, msg: "unexpected RightParen"},
 	}
 
-	runTestsError(t, cases, (*Parser).orderByClause)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestOrderingTerm(t *testing.T) {
 	cases := testCases(
-		`a ASC NULLS LAST`,
-		"OrderingTerm{E{ColRef{ColName}} TTT}",
-		`a DESC NULLS FIRST`,
-		"OrderingTerm{E{ColRef{ColName}} TTT}",
+		`MAX() OVER (ORDER BY a ASC NULLS LAST)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{T OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}} TTT}}} T}} }}`,
+		`MAX() OVER (ORDER BY a DESC NULLS FIRST)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{T OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}} TTT}}} T}} }}`,
 	)
 
-	runTests(t, cases, (*Parser).orderingTerm)
+	runTests(t, cases, (*Parser).expression)
 }
 
 func TestOrderingTermError(t *testing.T) {
 	cases := []testCaseError{
-		{code: `a DESC NULLS`, msg: "expecting [First Last], got EOF"},
+		{code: `MAX() OVER (ORDER BY a DESC NULLS)`, msg: "expecting [First Last], got RightParen"},
 	}
 
-	runTestsError(t, cases, (*Parser).orderingTerm)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestFilterClause(t *testing.T) {
 	cases := testCases(
-		`FILTER (WHERE a + b)`,
-		"FilterClause{TT T E{Add{ColRef{ColName} T ColRef{ColName}}} T}",
-		`FILTER WHERE a)`,
-		"FilterClause{T !ErrorMissing T E{ColRef{ColName}} T}",
-		`FILTER (a)`,
-		"FilterClause{TT !ErrorMissing E{ColRef{ColName}} T}",
-		`FILTER (WHERE)`,
-		"FilterClause{TTT !ErrorMissing T}",
-		`FILTER (WHERE a`,
-		"FilterClause{TT T E{ColRef{ColName}} !ErrorMissing}",
+		`MAX() FILTER (WHERE a + b)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				FilterClause{TT T E{Add{ColRef{ColName} T ColRef{ColName}}} T} }}`,
 	)
 
-	runTests(t, cases, (*Parser).filterClause)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestFilterClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `MAX() FILTER WHERE a)`, msg: "expecting LeftParen, got Where"},
+		{code: `MAX() FILTER (a)`, msg: "expecting Where, got Identifier"},
+		{code: `MAX() FILTER (WHERE)`, msg: "unexpected RightParen"},
+		{code: `MAX() FILTER (WHERE a`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestOverClause(t *testing.T) {
 	cases := testCases(
-		`OVER window_a`,
-		"OverClause{T WindowName}",
-		`OVER ()`,
-		"OverClause{T WindowDefinition{TT}}",
-		`OVER (window_a PARTITION BY a, b));`,
-		"OverClause{T WindowDefinition{T WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}}",
-		`OVER (ORDER BY a)`,
-		"OverClause{T WindowDefinition{T OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}}",
-		`OVER (RANGE CURRENT ROW)`,
-		"OverClause{T WindowDefinition{T FrameSpec{TTT} T}}",
-		`OVER ORDER BY a)`,
-		"OverClause{T !ErrorExpecting}",
-		`OVER (window_a PARTITION a));`,
-		"OverClause{T WindowDefinition{T WindowName PartitionBy{T !ErrorMissing CommaList{E{ColRef{ColName}}}} T}}",
-		`OVER (window_a PARTITION BY));`,
-		"OverClause{T WindowDefinition{T WindowName PartitionBy{TT !ErrorMissing} T}}",
-		`OVER (RANGE CURRENT ROW`,
-		"OverClause{T WindowDefinition{T FrameSpec{TTT} !ErrorMissing}}",
-		`OVER`,
-		"OverClause{T !ErrorExpecting}",
+		`MAX() OVER window_a`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowName} }}`,
+		`MAX() OVER ()`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{TT}} }}`,
+		`MAX() OVER (window_a PARTITION BY a, b));`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{T WindowName PartitionBy{TT CommaList{E{ColRef{ColName}} T E{ColRef{ColName}}}} T}} }}`,
+		`MAX() OVER (ORDER BY a)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{T OrderByClause{TT CommaList{OrderingTerm{E{ColRef{ColName}}}}} T}} }}`,
+		`MAX() OVER (RANGE CURRENT ROW)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T 
+				OverClause{T WindowDefinition{T FrameSpec{TTT} T}} }}`,
 	)
 
-	runTests(t, cases, (*Parser).overClause)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestOverClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `MAX() OVER ORDER BY a)`, msg: "expecting LeftParen, got Order"},
+		{code: `MAX() OVER (window_a PARTITION a));`, msg: "expecting By, got Identifier"},
+		{code: `MAX() OVER (window_a PARTITION BY));`, msg: "unexpected RightParen"},
+		{code: `MAX() OVER (RANGE CURRENT ROW`, msg: "expecting RightParen, got EOF"},
+		{code: `MAX() OVER`, msg: "expecting LeftParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestFrameSpec(t *testing.T) {
 	cases := testCases(
-		`ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS`,
-		"FrameSpec{TTTTTT}",
-		`GROUPS 10 PRECEDING EXCLUDE CURRENT ROW`,
-		"FrameSpec{T E{T} TTTT}",
-		`RANGE CURRENT ROW EXCLUDE GROUP`,
-		"FrameSpec{TTTTT}",
-		`ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING EXCLUDE TIES`,
-		"FrameSpec{T FrameSpecBetween{T E{T} TT E{T} T} TT}",
-		`ROWS UNBOUNDED EXCLUDE NO OTHERS`,
-		"FrameSpec{TT !ErrorMissing TTT}",
-		`RANGE CURRENT EXCLUDE GROUP`,
-		"FrameSpec{TT !ErrorMissing TT}",
-		`GROUPS 10 EXCLUDE CURRENT ROW`,
-		"FrameSpec{T E{T} !ErrorMissing TTT}",
-		`ROWS`,
-		"FrameSpec{T !ErrorExpecting}",
-		`ROWS UNBOUNDED PRECEDING EXCLUDE NO`,
-		"FrameSpec{TTTTT !ErrorMissing}",
-		`GROUPS 10 PRECEDING EXCLUDE CURRENT`,
-		"FrameSpec{T E{T} TTT !ErrorMissing}",
-		`ROWS UNBOUNDED PRECEDING EXCLUDE`,
-		"FrameSpec{TTTT !ErrorExpecting}",
+		`MAX() OVER (ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{TTTTTT} T}}}}`,
+		`MAX() OVER (GROUPS 10 PRECEDING EXCLUDE CURRENT ROW)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T E{T} TTTT} T}}}}`,
+		`MAX() OVER (RANGE CURRENT ROW EXCLUDE GROUP)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{TTTTT} T}}}}`,
+		`MAX() OVER (ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING EXCLUDE TIES)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T FrameSpecBetween{T E{T} TT E{T} T} TT} T}}}}`,
 	)
 
-	runTests(t, cases, (*Parser).frameSpec)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestFrameSpecError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `MAX() OVER (ROWS UNBOUNDED EXCLUDE NO OTHERS)`, msg: "expecting Preceding, got Exclude"},
+		{code: `MAX() OVER (RANGE CURRENT EXCLUDE GROUP)`, msg: "expecting Row, got Exclude"},
+		{code: `MAX() OVER (GROUPS 10 EXCLUDE CURRENT ROW)`, msg: "expecting Preceding, got Exclude"},
+		{code: `MAX() OVER (ROWS)`, msg: "unexpected RightParen"},
+		{code: `MAX() OVER (ROWS UNBOUNDED PRECEDING EXCLUDE NO)`, msg: "expecting Others, got RightParen"},
+		{code: `MAX() OVER (GROUPS 10 PRECEDING EXCLUDE CURRENT)`, msg: "expecting Row, got RightParen"},
+		{code: `MAX() OVER (ROWS UNBOUNDED PRECEDING EXCLUDE)`, msg: "expecting [No Current Group Ties], got RightParen"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestFrameSpecBetween(t *testing.T) {
 	cases := testCases(
-		`BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING`,
-		"FrameSpecBetween{TTTT E{T} T}",
-		`BETWEEN 10 PRECEDING AND CURRENT ROW`,
-		"FrameSpecBetween{T E{T} TTTT}",
-		`BETWEEN CURRENT ROW AND 10 FOLLOWING`,
-		"FrameSpecBetween{TTTT E{T} T}",
-		`BETWEEN 10 FOLLOWING AND UNBOUNDED FOLLOWING`,
-		"FrameSpecBetween{T E{T} TTTT}",
-		`BETWEEN UNBOUNDED AND 10 PRECEDING`,
-		"FrameSpecBetween{TT !ErrorMissing T E{T} T}",
-		`BETWEEN CURRENT AND 10 FOLLOWING`,
-		"FrameSpecBetween{TT !ErrorMissing T E{T} T}",
-		`BETWEEN 10 AND CURRENT ROW`,
-		"FrameSpecBetween{T E{T} !ErrorExpecting TTT}",
-		`BETWEEN PRECEDING AND 10 PRECEDING`,
-		"FrameSpecBetween{T !ErrorExpecting TT E{T} T}",
-		`BETWEEN ROW AND 10 FOLLOWING`,
-		"FrameSpecBetween{T !ErrorMissing TT E{T} T}",
-		`BETWEEN FOLLOWING AND UNBOUNDED FOLLOWING`,
-		"FrameSpecBetween{T !ErrorMissing TTTT}",
-		`BETWEEN AND 10 PRECEDING`,
-		"FrameSpecBetween{T !ErrorExpecting T E{T} T}",
-		`BETWEEN UNBOUNDED PRECEDING 10 PRECEDING`,
-		"FrameSpecBetween{TTT !ErrorMissing E{T} T}",
-		`BETWEEN CURRENT ROW AND UNBOUNDED`,
-		"FrameSpecBetween{TTTTT !ErrorMissing}",
-		`BETWEEN 10 PRECEDING AND CURRENT`,
-		"FrameSpecBetween{T E{T} TTT !ErrorMissing}",
-		`BETWEEN UNBOUNDED PRECEDING AND 10`,
-		"FrameSpecBetween{TTTT E{T} !ErrorExpecting}",
-		`BETWEEN UNBOUNDED PRECEDING AND`,
-		"FrameSpecBetween{TTT T !ErrorExpecting}",
+		`MAX() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T FrameSpecBetween{TTTT E{T} T}} T}}}}`,
+		`MAX() OVER (RANGE BETWEEN 10 PRECEDING AND CURRENT ROW)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T FrameSpecBetween{T E{T} TTTT}} T}}}}`,
+		`MAX() OVER (RANGE BETWEEN CURRENT ROW AND 10 FOLLOWING)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T FrameSpecBetween{TTTT E{T} T}} T}}}}`,
+		`MAX() OVER (RANGE BETWEEN 10 FOLLOWING AND UNBOUNDED FOLLOWING)`,
+		`E{FunctionCall{FunctionName T FunctionArguments{} T OverClause{T WindowDefinition{T
+			FrameSpec{T FrameSpecBetween{T E{T} TTTT}} T}}}}`,
 	)
 
-	runTests(t, cases, (*Parser).frameSpecBetween)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestFrameSpecBetweenError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `MAX() OVER (RANGE BETWEEN UNBOUNDED AND 10 PRECEDING)`, msg: "expecting Preceding, got And"},
+		{code: `MAX() OVER (RANGE BETWEEN CURRENT AND 10 FOLLOWING)`, msg: "expecting Row, got And"},
+		{code: `MAX() OVER (RANGE BETWEEN 10 AND CURRENT ROW)`, msg: "expecting [Preceding Following], got And"},
+		{code: `MAX() OVER (RANGE BETWEEN PRECEDING AND 10 PRECEDING)`, msg: "unexpected Preceding"},
+		{code: `MAX() OVER (RANGE BETWEEN ROW AND 10 FOLLOWING)`, msg: "unexpected Row"},
+		{code: `MAX() OVER (RANGE BETWEEN FOLLOWING AND UNBOUNDED FOLLOWING)`, msg: "unexpected Following"},
+		{code: `MAX() OVER (RANGE BETWEEN AND 10 PRECEDING)`, msg: "unexpected And"},
+		{code: `MAX() OVER (RANGE BETWEEN UNBOUNDED PRECEDING 10 PRECEDING)`, msg: "expecting And, got Numeric"},
+		{code: `MAX() OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED)`, msg: "expecting Following, got RightParen"},
+		{code: `MAX() OVER (RANGE BETWEEN 10 PRECEDING AND CURRENT)`, msg: "expecting Row, got RightParen"},
+		{code: `MAX() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 10)`, msg: "expecting [Preceding Following], got RightParen"},
+		{code: `MAX() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND)`, msg: "unexpected RightParen"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestParenExpression(t *testing.T) {
 	cases := testCases(
 		`(TRUE = FALSE OR 10 == 20)`,
-		"ParenE{T CommaList{E{Or{Equal{TTT} T Equal{TTT}}}} T}",
+		"E{ParenE{T CommaList{E{Or{Equal{TTT} T Equal{TTT}}}} T}}",
 		`(TRUE > FALSE < 10)`,
-		"ParenE{T CommaList{E{LessThan{GreaterThan{TTT} TT}}} T}",
+		"E{ParenE{T CommaList{E{LessThan{GreaterThan{TTT} TT}}} T}}",
 		`(10 + column_a)`,
-		"ParenExpression{T CommaList{Expression{Add{T T ColumnReference{ColumnName}}}} T}",
-		`();`,
-		"ParenE{T !ErrorMissing T}",
-		//TODO: `(, 10);`,
-		//TODO: "ParenE{T CommaList{E{}} !ErrorMissing}",
-		//TODO: `(10 10);`,
-		//TODO: "ParenE{T CommaList{E{T} !ErrorMissing E{T}} T}",
-		//TODO: `(10 AS 10);`,
-		//TODO: "ParenE{T CommaList{E{T} Skipped{T} E{T}} T}",
-		//TODO: `(10,,10);`,
-		//TODO: "ParenE{T CommaList{E{T} T !ErrorMissing T E{T}} T}",
-		//TODO: `(10, AS);`,
-		//TODO: "ParenE{T CommaList{E{T} T Skipped{T}} T}",
-		`(10;`,
-		"ParenE{T CommaList{E{T}} !ErrorMissing}",
+		"E{ParenE{T CommaList{Expression{Add{T T ColumnReference{ColumnName}}}} T}}",
 	)
 
-	runTests(t, cases, (*Parser).parenExpression)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestParenExpressionError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `();`, msg: "unexpected RightParen"},
+		{code: `(, 10);`, msg: "unexpected Comma"},
+		{code: `(10 10);`, msg: "expecting RightParen, got Numeric"},
+		{code: `(10 AS 10);`, msg: "expecting RightParen, got As"},
+		{code: `(10,,10);`, msg: "unexpected Comma"},
+		{code: `(10, AS);`, msg: "unexpected As"},
+		{code: `(10;`, msg: "expecting RightParen, got Semicolon"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestCastExpression(t *testing.T) {
 	cases := testCases(
-		`CAST ('10' AS INTEGER)`, "Cast{TT E{T} T TypeName{T} T}",
-		`CAST 10 AS NUMBER);`,
-		"Cast{T !ErrorMissing Expression{T} T TypeName{T} T}",
-		`CAST AS NUMBER);`,
-		"Cast{T !ErrorMissing !ErrorMissing T TypeName{T} T}",
-		`CAST(10 AS);`,
-		"Cast{TT Expression{T} T !ErrorMissing T}",
-		`CAST(10 NUMBER);`,
-		"Cast{TT Expression{T} !ErrorMissing TypeName{T} T}",
-		`CAST(10 AS NUMBER;`,
-		"Cast{TT Expression{T} T TypeName{T} !ErrorMissing}",
+		`CAST ('10' AS INTEGER)`, "E{Cast{TT E{T} T TypeName{T} T}}",
 	)
 
-	runTests(t, cases, (*Parser).castExpression)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestCastExpressionError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CAST 10 AS NUMBER);`, msg: "expecting LeftParen, got Numeric"},
+		{code: `CAST AS NUMBER);`, msg: "expecting LeftParen, got As"},
+		{code: `CAST(10 AS);`, msg: "expecting Identifier, got RightParen"},
+		{code: `CAST(10 NUMBER);`, msg: "expecting As, got Identifier"},
+		{code: `CAST(10 AS NUMBER;`, msg: "expecting RightParen, got Semicolon"},
+	}
+
+	runTestsError(t, cases, (*Parser).castExpression)
 }
 
 func TestExists(t *testing.T) {
 	cases := testCases(
-		`EXISTS(SELECT)`, "Exists{TT SimpleSelect{SelectCore{T !ErrorMissing}} T}",
-		`EXISTS(SELECT 10)`, "Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
+		`EXISTS(SELECT 10)`, "E{Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
 		`EXISTS(WITH table_name_a AS (SELECT 10) SELECT 10)`,
-		`Exists{TT SimpleSelect{
+		`E{Exists{TT SimpleSelect{
 				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
-				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
-		`EXISTS SELECT 10);`,
-		"Exists{T !ErrorMissing SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}",
-		`EXISTS(10);`,
-		"Exists{TT Skipped{T} T}",
-		`EXISTS(10;`,
-		"Exists{TT Skipped{T}}",
-		`EXISTS (SELECT 10;`,
-		"Exists{TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
-		`EXISTS ();`,
-		"Exists{TT !ErrorMissing T}",
+				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}`,
 	)
 
-	runTests(t, cases, (*Parser).exists)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestExistsError(t *testing.T) {
+	cases := []testCaseError{
+		//TODO: {code: `EXISTS(SELECT)`, msg: ""},
+		{code: `EXISTS SELECT 10);`, msg: "expecting LeftParen, got Select"},
+		//TODO: {code: `EXISTS(10);`, msg: ""},
+		//TODO: {code: `EXISTS(10;`, msg: ""},
+		{code: `EXISTS (SELECT 10;`, msg: "expecting RightParen, got Semicolon"},
+		//TODO: {code: `EXISTS ();`, msg: ""},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestCaseExpression(t *testing.T) {
 	cases := testCases(
-		`CASE WHEN 10 THEN TRUE ELSE FALSE END`, "Case{T When {T E{T} T E{T}} Else {T E{T}} T}",
-		`CASE a WHEN 10 THEN TRUE END`, "Case{T E{ColRef{ColName}} When {T E{T} T E{T}} T}",
-		`CASE ELSE 10`,
-		"Case{T !ErrorMissing Else{T Expression{T}} !ErrorMissing}",
-		`CASE WHEN THEN 10 END`,
-		"Case{T When{T !ErrorMissing T Expression{T}} T}",
-		`CASE WHEN 10 10 END`,
-		"Case{T When{T Expression{T} !ErrorMissing Expression{T}} T}",
-		`CASE WHEN 10 THEN END`,
-		"Case{T When{T Expression{T} T !ErrorMissing} T}",
-		`CASE WHEN 10 THEN 10 ELSE END`,
-		"Case{T When{T Expression{T} T Expression{T}} Else{T !ErrorMissing} T}",
+		`CASE WHEN 10 THEN TRUE ELSE FALSE END`,
+		"E{Case{T When {T E{T} T E{T}} Else {T E{T}} T}}",
+		`CASE a WHEN 10 THEN TRUE END`,
+		"E{Case{T E{ColRef{ColName}} When {T E{T} T E{T}} T}}",
+		`CASE WHEN 10 THEN TRUE WHEN 20 THEN 'a' ELSE FALSE END`,
+		"E{Case{T When {T E{T} T E{T}} When {T E{T} T E{T}} Else {T E{T}} T}}",
 	)
 
-	runTests(t, cases, (*Parser).caseExpression)
+	runTests(t, cases, (*Parser).expression)
 }
 
-func TestWhen(t *testing.T) {
-	cases := testCases(
-		`WHEN 10 THEN TRUE`, "When {T E{T} T E{T}}",
-		`WHEN 10 THEN 'a' END);`, "When{T E{T} T E{T}}",
-		`WHEN 20 THEN 'b'`, "When{T E{T} T E{T}}",
-		`WHEN THEN TRUE`, "When {T !ErrorMissing T E{T}}",
-		`WHEN 10 TRUE`, "When {T E{T} !ErrorMissing E{T}}",
-		`WHEN 10 THEN`, "When {T E{T} T !ErrorMissing}",
-	)
+func TestCaseExpressionError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CASE ELSE 10`, msg: "expecting When, got Else"},
+		{code: `CASE WHEN THEN 10 END`, msg: "unexpected Then"},
+		{code: `CASE WHEN 10 10 END`, msg: "expecting Then, got Numeric"},
+		{code: `CASE WHEN 10 THEN END`, msg: "unexpected End"},
+		{code: `CASE WHEN 10 THEN 10 ELSE END`, msg: "unexpected End"},
+	}
 
-	runTests(t, cases, (*Parser).when)
-}
-
-func TestCaseElse(t *testing.T) {
-	cases := testCases(
-		`ELSE FALSE END`, "Else{T E{T}}",
-		`ELSE END`, "Else{T !ErrorMissing}",
-	)
-
-	runTests(t, cases, (*Parser).caseElse)
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestRaise(t *testing.T) {
 	cases := testCases(
-		`RAISE (IGNORE)`, "Raise{TTTT}",
-		`RAISE (ROLLBACK, 'error message')`, "Raise{TTTT ErrorMessage{E{T}} T}",
-		`RAISE;`,
-		"Raise{T !ErrorMissing}",
-		`RAISE IGNORE);`,
-		"Raise{T !ErrorMissing TT}",
-		`RAISE(IGNORE;`,
-		"Raise{TTT !ErrorMissing}",
-		`RAISE();`,
-		"Raise{TT !ErrorExpecting T}",
-		`RAISE(, 'error');`,
-		"Raise{TT !ErrorExpecting T ErrorMessage{Expression{T}} T}",
-		`RAISE(ROLLBACK 'error');`,
-		"Raise{TTT !ErrorMissing ErrorMessage{Expression{T}} T}",
-		`RAISE(ROLLBACK, );`,
-		"Raise{TTTT !ErrorMissing T}",
-		`RAISE(ROLLBACK, 'error';`,
-		"Raise{TTTT ErrorMessage{Expression{T}} !ErrorMissing}",
+		`RAISE (IGNORE)`, "E{Raise{TTTT}}",
+		`RAISE (ROLLBACK, 'error message')`, "E{Raise{TTTT ErrorMessage{E{T}} T}}",
 	)
 
-	runTests(t, cases, (*Parser).raise)
+	runTests(t, cases, (*Parser).expression)
+}
+
+func TestRaiseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `RAISE;`, msg: "expecting LeftParen, got Semicolon"},
+		{code: `RAISE IGNORE);`, msg: "expecting LeftParen, got Ignore"},
+		{code: `RAISE(IGNORE;`, msg: "expecting RightParen, got Semicolon"},
+		{code: `RAISE();`, msg: "expecting [Ignore Rollback Abort Fail], got RightParen"},
+		{code: `RAISE(, 'error');`, msg: "expecting [Ignore Rollback Abort Fail], got Comma"},
+		{code: `RAISE(ROLLBACK 'error');`, msg: "expecting Comma, got String"},
+		{code: `RAISE(ROLLBACK, );`, msg: "unexpected RightParen"},
+		{code: `RAISE(ROLLBACK, 'error';`, msg: "expecting RightParen, got Semicolon"},
+	}
+
+	runTestsError(t, cases, (*Parser).expression)
 }
 
 func TestInsert(t *testing.T) {
@@ -2163,6 +2448,7 @@ func TestSelectStatementCTE(t *testing.T) {
 
 			p := New(lexer.New([]byte(c.code)))
 			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
 			p.advance()
 			p.advance()
 			p.advance()
@@ -2444,7 +2730,7 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 		t.Run(strconv.FormatInt(int64(i), 10), func(t *testing.T) {
 			defer func() {
 				switch v := recover().(type) {
-				case error:
+				case *syntaxError:
 					t.Fatalf("%d=>%q\n\t%s", i, c.code, v)
 				case nil:
 				default:
@@ -2456,6 +2742,7 @@ func runTests[T parsetree.Construction](t *testing.T, cases []testCase, parseFun
 
 			p := New(lexer.New([]byte(c.code)))
 			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
 			p.advance()
 			p.advance()
 			p.advance()
@@ -2490,6 +2777,7 @@ func runTestsError[T parsetree.Construction](t *testing.T, cases []testCaseError
 			}()
 			p := New(lexer.New([]byte(c.code)))
 			p.comments = make(map[*token.Token][]*token.Token)
+			p.advance()
 			p.advance()
 			p.advance()
 			p.advance()
