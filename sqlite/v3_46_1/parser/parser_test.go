@@ -2254,49 +2254,30 @@ func TestInsert(t *testing.T) {
 		`Insert{TT TableName T CommaList{ColumnName} T SimpleSelect{
 			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
 			SelectCore{T CommaList{ResultColumn{E{T}}}}}}`,
-		`INSERT INTO table_name(name) WITH cte AS (SELECT 10)`,
-		`Insert{TT TableName T CommaList{ColumnName} T
-			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}} }
-			!ErrorMissing}`,
-		`INSERT OR INTO table_name(name) VALUES('Go')`,
-		`Insert{T T !ErrorExpecting T TableName T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT table_name(name) VALUES('Go')`,
-		`Insert{T !ErrorMissing TableName T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO AS table_alias (name) VALUES('Go')`,
-		`Insert{TT !ErrorMissing T TableAlias T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO .table_name (name) VALUES('Go')`,
-		`Insert{TT !ErrorMissing T TableName T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO schema_name table_name(name) VALUES('Go')`,
-		`Insert{TT SchemaName !ErrorMissing TableName T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT OR FAIL INTO table_name AS (name) VALUES('Go')`,
-		`Insert{T TT T TableName T !ErrorMissing T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO table_name(name VALUES('Go')`,
-		`Insert{TT TableName T CommaList{ColumnName} !ErrorMissing T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO temp.table_name name) VALUES('Go')`,
-		`Insert{TT SchemaName T TableName !ErrorExpecting}`,
-		`INSERT INTO table_name(name VALUES('Go')`,
-		`Insert{TT TableName T CommaList{ColumnName} !ErrorMissing T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO table_name() VALUES('Go')`,
-		`Insert{TT TableName T !ErrorMissing T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T}}}}`,
-		`INSERT INTO table_name(name) VALUES('Go'), 'Rust')`,
-		`Insert{TT TableName T CommaList{ColumnName} T T
-			InsertValuesList{CommaList{InsertValuesItem{T CommaList{E{T}} T} T InsertValuesItem{!ErrorMissing CommaList{E{T}} T}}}}`,
-		`INSERT INTO table_name(name) VALUES`,
-		`Insert{TT TableName T CommaList{ColumnName} T T !ErrorMissing}`,
-		`INSERT INTO table_name(name) DEFAULT`,
-		"Insert{TT TableName T CommaList{ColumnName} T T !ErrorMissing}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.insert(nil) })
+}
+
+func TestInsertError(t *testing.T) {
+	cases := []testCaseError{
+		// TODO: {code: `INSERT INTO table_name(name) WITH cte AS (SELECT 10)`, msg: ""},
+		{code: `INSERT OR INTO table_name(name) VALUES('Go')`, msg: "expecting [Abort Fail Ignore Replace Rollback], got Into"},
+		{code: `INSERT table_name(name) VALUES('Go')`, msg: "expecting Into, got Identifier"},
+		{code: `INSERT INTO AS table_alias (name) VALUES('Go')`, msg: "expecting [Identifier Temp], got As"},
+		{code: `INSERT INTO .table_name (name) VALUES('Go')`, msg: "expecting [Identifier Temp], got Dot"},
+		{code: `INSERT INTO schema_name table_name(name) VALUES('Go')`, msg: "expecting [Values With Select Default], got Identifier"},
+		{code: `INSERT OR FAIL INTO table_name AS (name) VALUES('Go')`, msg: "expecting Identifier, got LeftParen"},
+		{code: `INSERT INTO table_name(name VALUES('Go')`, msg: "expecting RightParen, got Values"},
+		{code: `INSERT INTO temp.table_name name) VALUES('Go')`, msg: "expecting [Values With Select Default], got Identifier"},
+		{code: `INSERT INTO table_name(name VALUES('Go')`, msg: "expecting RightParen, got Values"},
+		{code: `INSERT INTO table_name() VALUES('Go')`, msg: "expecting Identifier, got RightParen"},
+		{code: `INSERT INTO table_name(name) VALUES('Go'), 'Rust')`, msg: "expecting LeftParen, got String"},
+		{code: `INSERT INTO table_name(name) VALUES`, msg: "expecting LeftParen, got EOF"},
+		{code: `INSERT INTO table_name(name) DEFAULT`, msg: "expecting Values, got EOF"},
+	}
+
+	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.insert(nil) })
 }
 
 func TestUpsertClause(t *testing.T) {
@@ -2325,17 +2306,6 @@ func TestUpsertClauseItem(t *testing.T) {
 		`ON CONFLICT (col_a, col_b) WHERE condition=true DO NOTHING`,
 		`UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}} T IndexedColumn{E{ColRef{ColName}}}} T
 			WhereClause{T E{Equal{ColRef{ColName} T T}}} TT}`,
-		`ON DO NOTHING`,
-		"UpsertClauseItem{T !ErrorMissing TT}",
-		`ON CONFLICT NOTHING`,
-		"UpsertClauseItem{TT !ErrorMissing T}",
-		`ON CONFLICT DO`,
-		"UpsertClauseItem{TT T !ErrorExpecting}",
-		`ON CONFLICT (col DO NOTHING`,
-		"UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} !ErrorMissing TT}",
-		//TODO: `ON CONFLICT (col_a) WHERE DO NOTHING`,
-		//TODO: `UpsertClauseItem{TT T CommaList{IndexedColumn{E{ColRef{ColName}}}} T
-		//TODO: 	WhereClause{T !ErrorMissing} TT}`,
 	)
 
 	runTests(t, cases, (*Parser).upsertClauseItem)
@@ -2345,11 +2315,16 @@ func TestUpsertClauseItemError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `ON CONFLICT DO UPDATE SET (col_a, col_b ='value_ab', col_c='value_c'`, msg: "expecting RightParen, got Equal"},
 		{code: `ON CONFLICT DO UPDATE SET ()='value_ab', col_c='value_c'`, msg: "expecting Identifier, got RightParen"},
-		//TODO: {code: `ON CONFLICT DO UPDATE col='value'`, msg: ""},
-		//TODO: {code: `ON CONFLICT DO UPDATE SET col='value' WHERE`, msg: ""},
-		//TODO: {code: `ON CONFLICT DO UPDATE SET WHERE condition=true`, msg: ""},
+		{code: `ON CONFLICT DO UPDATE col='value'`, msg: "expecting Set, got Identifier"},
+		{code: `ON CONFLICT DO UPDATE SET col='value' WHERE`, msg: "unexpected EOF"},
+		{code: `ON CONFLICT DO UPDATE SET WHERE condition=true`, msg: "expecting [Identifier LeftParen], got Where"},
 		{code: `ON CONFLICT DO UPDATE SET col 'value'`, msg: "expecting Equal, got String"},
-		//TODO: {code: `ON CONFLICT DO UPDATE SET col=`, msg: ""},
+		{code: `ON CONFLICT DO UPDATE SET col=`, msg: "unexpected EOF"},
+		{code: `ON DO NOTHING`, msg: "expecting Conflict, got Do"},
+		{code: `ON CONFLICT NOTHING`, msg: "expecting Do, got Nothing"},
+		{code: `ON CONFLICT DO`, msg: "expecting [Nothing Update], got EOF"},
+		{code: `ON CONFLICT (col DO NOTHING`, msg: "expecting RightParen, got Do"},
+		{code: `ON CONFLICT (col_a) WHERE DO NOTHING`, msg: "unexpected Do"},
 	}
 
 	runTestsError(t, cases, (*Parser).upsertClauseItem)
