@@ -74,7 +74,7 @@ func TestKindStringsIsSorted(t *testing.T) {
 			if kindStrings[i] > kindStrings[i+1] {
 				t.Logf("%q > %q", kindStrings[i], kindStrings[i+1])
 				break
-			} 
+			}
 		}
 	}
 }

@@ -2339,16 +2339,22 @@ func TestPragma(t *testing.T) {
 		`PRAGMA pragma_name=+SELECT`, "Pragma{T PragmaName T PragmaValue{TT}}",
 		`PRAGMA pragma_name='yes'`, "Pragma{T PragmaName T PragmaValue{T}}",
 		`PRAGMA pragma_name('yes')`, "Pragma{T PragmaName T PragmaValue{T} T}",
-		`PRAGMA .index_name`, "Pragma{T !ErrorMissing T PragmaName}",
-		`PRAGMA schema_name.`, "Pragma{T SchemaName T !ErrorMissing}",
-		`PRAGMA schema_name pragma_name`, "Pragma{T SchemaName !ErrorMissing PragmaName}",
-		`PRAGMA pragma_name=`, "Pragma{T PragmaName T !ErrorMissing}",
-		`PRAGMA pragma_name=+`, "Pragma{T PragmaName T PragmaValue{T !ErrorExpecting}}",
-		`PRAGMA pragma_name()`, "Pragma{T PragmaName T !ErrorMissing T}",
-		`PRAGMA pragma_name(10`, "Pragma{T PragmaName T PragmaValue{T} !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).pragma)
+}
+
+func TestPragmaError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `PRAGMA .pragma_name`, msg: "expecting [Identifier Temp], got Dot"},
+		{code: `PRAGMA schema_name.`, msg: "expecting [Identifier Temp], got EOF"},
+		{code: `PRAGMA pragma_name=`, msg: "unexpected EOF"},
+		{code: `PRAGMA pragma_name=+`, msg: "unexpected EOF"},
+		{code: `PRAGMA pragma_name()`, msg: "unexpected RightParen"},
+		{code: `PRAGMA pragma_name(10`, msg: "expecting RightParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).pragma)
 }
 
 func TestReindex(t *testing.T) {

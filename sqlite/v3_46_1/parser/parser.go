@@ -2654,82 +2654,43 @@ func (p *Parser) with() parsetree.NonTerminal {
 
 // pragma parses a pragma statement.
 func (p *Parser) pragma() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindPragma)
+	p.pushTreeKind(parsetree.KindPragma)
 
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.term(token.KindPragma)
 
-	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
-		if p.tok[1].Kind == token.KindDot {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else if p.tok[1].Kind == token.KindIdentifier {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-			p.advance()
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing dot`)))
-		}
-	} else if p.tok[0].Kind == token.KindDot {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing schema name`)))
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isAnyOfPos(0, token.KindIdentifier, token.KindTemp) && p.isPos(1, token.KindDot) {
+		p.termKind(parsetree.KindSchemaName, token.KindIdentifier, token.KindTemp)
+		p.term(token.KindDot)
+	}
+	p.termKind(parsetree.KindPragmaName, token.KindIdentifier, token.KindTemp)
+
+	if p.is(token.KindEqual) {
+		p.term()
+		p.addChild(p.pragmaValue())
+	} else if p.is(token.KindLeftParen) {
+		p.term()
+		p.addChild(p.pragmaValue())
+		p.term(token.KindRightParen)
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindPragmaName, p.tok[0]))
-		p.advance()
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma name`)))
-	}
-
-	if p.tok[0].Kind == token.KindEqual {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus || p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
-			nt.AddChild(p.pragmaValue())
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma value`)))
-		}
-	} else if p.tok[0].Kind == token.KindLeftParen {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus || p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
-			nt.AddChild(p.pragmaValue())
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing pragma value`)))
-		}
-
-		if p.tok[0].Kind == token.KindRightParen {
-			nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-			p.advance()
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing ")"`)))
-		}
-	}
-
-	return nt
+	return p.popTree()
 }
 
 // pragmaValue parses a pragma value.
 func (p *Parser) pragmaValue() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindPragmaValue)
+	p.pushTreeKind(parsetree.KindPragmaValue)
 
-	if p.tok[0].Kind == token.KindPlus || p.tok[0].Kind == token.KindMinus {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isAnyOf(token.KindPlus, token.KindMinus) {
+		p.term()
 	}
 
-	if p.tok[0].Kind == token.KindNumeric || p.tok[0].Kind.IsKeyword() || p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindString {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.isAnyOf(token.KindNumeric, token.KindIdentifier, token.KindString) || p.isKeyword() {
+		p.term()
 	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorExpecting, errors.New(`expecting number, keyword, identifier, or string`)))
+		p.errorUnexpected()
 	}
 
-	return nt
+	return p.popTree()
 }
 
 // reindex parses a reindex statement.
@@ -3516,6 +3477,10 @@ func (p *Parser) isAnyOfPos(pos int, k0, k1 token.Kind, ks ...token.Kind) bool {
 		return true
 	}
 	return slices.Contains(ks, p.tok[pos].Kind)
+}
+
+func (p *Parser) isKeyword() bool {
+	return p.tok[0].Kind.IsKeyword()
 }
 
 func (p *Parser) term(tokKinds ...token.Kind) {
