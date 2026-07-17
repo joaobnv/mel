@@ -2396,10 +2396,17 @@ func TestReleaseError(t *testing.T) {
 func TestSavepoint(t *testing.T) {
 	cases := testCases(
 		`SAVEPOINT savepoint_name`, "Savepoint{T SavepointName}",
-		`SAVEPOINT`, "Savepoint{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).savepoint)
+}
+
+func TestSavepointError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `SAVEPOINT`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).savepoint)
 }
 
 func TestSelectStatement(t *testing.T) {

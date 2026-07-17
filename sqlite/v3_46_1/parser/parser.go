@@ -2726,18 +2726,12 @@ func (p *Parser) release() parsetree.NonTerminal {
 
 // savepoint parses a savepoint statement.
 func (p *Parser) savepoint() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindSavepoint)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTreeKind(parsetree.KindSavepoint)
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSavepointName, p.tok[0]))
-		p.advance()
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
-	}
+	p.term(token.KindSavepoint)
+	p.termKind(parsetree.KindSavepointName, token.KindIdentifier)
 
-	return nt
+	return p.popTree()
 }
 
 // selectStatement parses a select statement.
