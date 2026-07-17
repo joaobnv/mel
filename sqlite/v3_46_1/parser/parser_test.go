@@ -2362,11 +2362,17 @@ func TestReindex(t *testing.T) {
 		`REINDEX`, "Reindex{T}",
 		`REINDEX table_name`, "Reindex{T CollationTableOrIndexName}",
 		`REINDEX temp.table_name`, "Reindex{T SchemaName T TableOrIndexName}",
-		`REINDEX schema_name.`, "Reindex{T SchemaName T !ErrorMissing}",
-		`REINDEX schema_name table_name`, "Reindex{T SchemaName !ErrorMissing TableOrIndexName}",
 	)
 
 	runTests(t, cases, (*Parser).reindex)
+}
+
+func TestReindexError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `REINDEX schema_name.`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).reindex)
 }
 
 func TestRelease(t *testing.T) {
