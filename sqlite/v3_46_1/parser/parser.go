@@ -2712,23 +2712,16 @@ func (p *Parser) reindex() parsetree.NonTerminal {
 
 // release parses a release statement.
 func (p *Parser) release() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindRelease)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTreeKind(parsetree.KindRelease)
+	p.term(token.KindRelease)
 
-	if p.tok[0].Kind == token.KindSavepoint {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
+	if p.is(token.KindSavepoint) {
+		p.term()
 	}
 
-	if p.tok[0].Kind == token.KindIdentifier {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSavepointName, p.tok[0]))
-		p.advance()
-	} else {
-		nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing savepoint name`)))
-	}
+	p.termKind(parsetree.KindSavepointName, token.KindIdentifier)
 
-	return nt
+	return p.popTree()
 }
 
 // savepoint parses a savepoint statement.

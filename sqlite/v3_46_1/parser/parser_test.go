@@ -2379,11 +2379,18 @@ func TestRelease(t *testing.T) {
 	cases := testCases(
 		`RELEASE savepoint_name`, "Release{T SavepointName}",
 		`RELEASE SAVEPOINT savepoint_name`, "Release{TT SavepointName}",
-		`RELEASE`, "Release{T !ErrorMissing}",
-		`RELEASE SAVEPOINT`, "Release{TT !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).release)
+}
+
+func TestReleaseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `RELEASE`, msg: "expecting Identifier, got EOF"},
+		{code: `RELEASE SAVEPOINT`, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).release)
 }
 
 func TestSavepoint(t *testing.T) {
