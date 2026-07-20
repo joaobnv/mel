@@ -5,7 +5,6 @@ package parser
 // TODO: handle tables named TEMP, and also columns named TEMP.
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -671,7 +670,6 @@ func (p *Parser) indexedColumnExprList() parsetree.NonTerminal {
 	return p.popTree()
 }
 
-
 func (p *Parser) indexedColumnExpr() parsetree.NonTerminal {
 	p.pushTreeKind(parsetree.KindIndexedColumn)
 	// the collate part is handled by the expression parser
@@ -879,7 +877,7 @@ func (p *Parser) columnNameList() parsetree.NonTerminal {
 	p.pushTreeKind(parsetree.KindCommaList)
 
 	p.termKind(parsetree.KindColumnName, token.KindIdentifier)
-	for p.is(token.KindComma){
+	for p.is(token.KindComma) {
 		p.term()
 		p.termKind(parsetree.KindColumnName, token.KindIdentifier)
 	}
@@ -2992,7 +2990,7 @@ func (p *Parser) tableOrSubquery_table() {
 
 	if p.isPos(1, token.KindLeftParen) {
 		p.termKind(parsetree.KindTableFunctionName, token.KindIdentifier, token.KindTemp)
-		
+
 		p.term(token.KindLeftParen)
 		p.addChild(p.expressionList())
 		p.term(token.KindRightParen)
@@ -3082,7 +3080,7 @@ func (p *Parser) windowClauseItem() parsetree.NonTerminal {
 // valuesClause parses a values clause.
 func (p *Parser) valuesClause() parsetree.NonTerminal {
 	p.pushTreeKind(parsetree.KindValuesClause)
-	
+
 	p.term(token.KindValues)
 	p.addChild(p.valuesItemList())
 
@@ -3104,7 +3102,7 @@ func (p *Parser) valuesItemList() parsetree.NonTerminal {
 // valuesItem parses a item of a values clause.
 func (p *Parser) valuesItem() parsetree.NonTerminal {
 	p.pushTreeKind(parsetree.KindValuesItem)
-	
+
 	p.term(token.KindLeftParen)
 	p.addChild(p.expressionList())
 	p.term(token.KindRightParen)
@@ -3188,29 +3186,22 @@ func (p *Parser) update(withClause parsetree.NonTerminal) parsetree.NonTerminal 
 
 // vacuum parses a vacuum statement.
 func (p *Parser) vacuum() parsetree.NonTerminal {
-	nt := parsetree.NewNonTerminal(parsetree.KindVacuum)
-	nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-	p.advance()
+	p.pushTreeKind(parsetree.KindVacuum)
 
-	if p.tok[0].Kind == token.KindIdentifier || p.tok[0].Kind == token.KindTemp {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindSchemaName, p.tok[0]))
-		p.advance()
+	p.term(token.KindVacuum)
+
+	if p.isAnyOf(token.KindIdentifier, token.KindTemp) {
+		p.termKind(parsetree.KindSchemaName)
 	}
 
-	if p.tok[0].Kind == token.KindInto {
-		nt.AddChild(parsetree.NewTerminal(parsetree.KindToken, p.tok[0]))
-		p.advance()
-
-		if p.isStartOfExpression() {
-			fn := parsetree.NewNonTerminal(parsetree.KindFileName)
-			fn.AddChild(p.expression())
-			nt.AddChild(fn)
-		} else {
-			nt.AddChild(parsetree.NewError(parsetree.KindErrorMissing, errors.New(`missing file name`)))
-		}
+	if p.is(token.KindInto) {
+		p.term()
+		p.pushTreeKind(parsetree.KindFileName)
+		p.addChild(p.expression())
+		p.addChild(p.popTree())
 	}
 
-	return nt
+	return p.popTree()
 }
 
 func (p *Parser) pushTree(t parsetree.Construction) {
