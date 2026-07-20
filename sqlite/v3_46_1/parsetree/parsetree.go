@@ -128,6 +128,7 @@ const (
 	KindOrderingTerm
 	KindOverClause
 	KindParenExpression
+	KindParenSelect
 	KindPartitionBy
 	KindPragma
 	KindPragmaName
@@ -208,9 +209,9 @@ var kindStrings = []string{
 	"HavingClause", "In", "IndexName", "IndexedColumn", "Insert", "InsertValuesItem", "InsertValuesList", "Is", "IsDistinctFrom", "IsNot",
 	"IsNotDistinctFrom", "Isnull", "JoinClause", "JoinConstraint", "JoinOperator", "LeftShift", "LessThan", "LessThanOrEqual", "Like", "LimitClause",
 	"Match", "Mod", "ModuleArgument", "ModuleName", "Multiply", "Negate", "Not", "NotBetween", "NotEqual", "NotGlob", "NotIn", "NotLike", "NotMatch",
-	"NotNull", "NotNullColumnConstraint", "NotRegexp", "Notnull", "Or", "OrderByClause", "OrderingTerm", "OverClause", "ParenExpression", "PartitionBy",
-	"Pragma", "PragmaName", "PragmaValue", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName", "Raise",
-	"Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback",
+	"NotNull", "NotNullColumnConstraint", "NotRegexp", "Notnull", "Or", "OrderByClause", "OrderingTerm", "OverClause", "ParenExpression", "ParenSelect",
+	"PartitionBy", "Pragma", "PragmaName", "PragmaValue", "PrefixPlus", "PrimaryKeyColumnConstraint", "PrimaryKeyTableConstraint", "QualifiedTableName",
+	"Raise", "Regexp", "Reindex", "Release", "RenameColumn", "RenameTo", "ResultColumn", "ReturningClause", "ReturningItem", "RightShift", "Rollback",
 	"SQLStatement", "Savepoint", "SavepointName", "SchemaIndexOrTableName", "SchemaName", "SelectCore", "SimpleSelect", "Skipped", "Subtract", "TableAlias",
 	"TableConstraint", "TableFunctionName", "TableName", "TableOption", "TableOrIndexName", "TableOrSubquery", "Token", "TriggerBody", "TriggerName",
 	"TypeName", "UniqueColumnConstraint", "UniqueTableConstraint", "Update", "UpdateSetItem", "UpsertClause", "UpsertClauseItem", "Vacuum", "ValuesClause",

@@ -629,7 +629,7 @@ func TestCreateIndexError(t *testing.T) {
 		{code: `CREATE INDEX index_name ON (column_name)`, msg: "expecting Identifier, got LeftParen"},
 		{code: `CREATE INDEX index_name ON table_name column_name)`, msg: "expecting LeftParen, got Identifier"},
 		{code: `CREATE INDEX index_name ON table_name(column_name `, msg: "expecting RightParen, got EOF"},
-		//TODO: {code: `CREATE INDEX index_name ON table_name(column_name) WHERE `, msg: ""},
+		{code: `CREATE INDEX index_name ON table_name(column_name) WHERE `, msg: "unexpected EOF"},
 	}
 
 	runTestsError(t, cases, (*Parser).createIndex)
@@ -643,11 +643,7 @@ func TestIndexedColumn(t *testing.T) {
 		"IndexedColumn{ColName T CollationName T}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.indexedColumn(false)
-	}
-
-	runTests(t, cases, fn)
+	runTests(t, cases, (*Parser).indexedColumn)
 }
 
 func TestIndexedColumnError(t *testing.T) {
@@ -655,13 +651,10 @@ func TestIndexedColumnError(t *testing.T) {
 		{code: `column_name COLLATE ASC`, msg: "expecting Identifier, got Asc"},
 	}
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.indexedColumn(false)
-	}
-	runTestsError(t, cases, fn)
+	runTestsError(t, cases, (*Parser).indexedColumn)
 }
 
-func TestIndexedColumnExpression(t *testing.T) {
+func TestIndexedColumnExpr(t *testing.T) {
 	cases := testCases(
 		`column_name`,
 		"IndexedColumn{E{ColRef{ColName}}}",
@@ -671,11 +664,7 @@ func TestIndexedColumnExpression(t *testing.T) {
 		"IndexedColumn{E{ColRef{ColName}} T}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.indexedColumn(true)
-	}
-
-	runTests(t, cases, fn)
+	runTests(t, cases, (*Parser).indexedColumnExpr)
 }
 
 func TestCreateTable(t *testing.T) {
@@ -719,7 +708,7 @@ func TestCreateTableError(t *testing.T) {
 		{code: `CREATE TABLE .table_name (column_a INTEGER);`, msg: "expecting Identifier, got Dot"},
 		{code: `CREATE TABLE (column_a INTEGER);`, msg: "expecting Identifier, got LeftParen"},
 		{code: `CREATE TABLE table_name (column_a INTEGER`, msg: "expecting RightParen, got EOF"},
-		//TODO: {code: `CREATE TEMPORARY TABLE table_name AS`, msg: ""},
+		{code: `CREATE TEMPORARY TABLE table_name AS`, msg: "expecting Select, got EOF"},
 
 	}
 
@@ -772,8 +761,8 @@ func TestPrimaryKeyTableConstraintError(t *testing.T) {
 
 func TestUniqueTableConstraint(t *testing.T) {
 	cases := testCases(
-		`UNIQUE (column_name) ON CONFLICT ROLLBACK`,
-		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName}} T ConflictClause{TTT}}",
+		`UNIQUE (column_name_a, column_name_b) ON CONFLICT ROLLBACK`,
+		"UniqueTableConstraint{T T CommaList{IndexedColumn{ColName} T IndexedColumn{ColName}} T ConflictClause{TTT}}",
 	)
 
 	runTests(t, cases, (*Parser).uniqueTableConstraint)
@@ -799,7 +788,7 @@ func TestCheckTableConstraint(t *testing.T) {
 func TestCheckTableConstraintError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `CHECK TRUE)`, msg: "expecting LeftParen, got Identifier"},
-		//TODO: {code: `CHECK ()`, msg: ""},
+		{code: `CHECK ()`, msg: "unexpected RightParen"},
 		{code: `CHECK (TRUE`, msg: "expecting RightParen, got EOF"},
 	}
 
@@ -863,11 +852,7 @@ func TestColumnNameList(t *testing.T) {
 		"CommaList{ColName T ColName}",
 	)
 
-	fn := func(p *Parser) parsetree.NonTerminal {
-		return p.columnNameList(token.KindRightParen, token.KindSemicolon, token.KindEOF)
-	}
-
-	runTests(t, cases, fn)
+	runTests(t, cases, (*Parser).columnNameList)
 }
 
 func TestCreateTrigger(t *testing.T) {
@@ -908,7 +893,7 @@ func TestCreateTriggerError(t *testing.T) {
 		{code: `CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR ROW BEGIN SELECT 10; END`, msg: "expecting Each, got Row"},
 		{code: `CREATE TEMPORARY TRIGGER schema_name.trigger_name AFTER INSERT ON table_name FOR EACH BEGIN SELECT 10; END`, msg: "expecting Row, got Begin"},
 		{code: `CREATE TRIGGER trigger_name UPDATE OF a b ON table_name BEGIN SELECT 10; END`, msg: "expecting On, got Identifier"},
-		//TODO: {code: `CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`, msg: ""},
+		{code: `CREATE TRIGGER trigger_name INSTEAD OF UPDATE ON table_name WHEN BEGIN SELECT 10; END`, msg: "unexpected Begin"},
 		{code: `CREATE TRIGGER trigger_name INSTEAD UPDATE ON table_name BEGIN SELECT 10; END`, msg: "expecting Of, got Update"},
 		{code: `CREATE TRIGGER INSTEAD OF UPDATE ON table_name BEGIN SELECT 10; END`, msg: "expecting Identifier, got Instead"},
 		{code: `CREATE TRIGGER trigger_name DELETE ON table_name`, msg: "expecting Begin, got EOF"},
@@ -938,7 +923,7 @@ func TestCreateViewError(t *testing.T) {
 		{code: `CREATE TEMP VIEW IF NOT view_name AS SELECT 10`, msg: "expecting Exists, got Identifier"},
 		{code: `CREATE TEMP VIEW AS SELECT 10`, msg: "expecting Identifier, got As"},
 		{code: `CREATE TEMP VIEW schema_name view_name AS SELECT 10`, msg: "expecting As, got Identifier"},
-		//TODO: {code: `CREATE TEMP VIEW view_name AS `, msg: ""},
+		{code: `CREATE TEMP VIEW view_name AS `, msg: "expecting Select, got EOF"},
 		{code: `CREATE TEMPORARY VIEW view_name (a b) AS SELECT 10`, msg: "expecting RightParen, got Identifier"},
 		{code: `CREATE TEMPORARY VIEW view_name (a, b AS SELECT 10`, msg: "expecting RightParen, got As"},
 		{code: `CREATE TEMP VIEW view_name SELECT 10`, msg: "expecting As, got Select"},
@@ -1008,8 +993,8 @@ func TestDeleteError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `DELETE table_name`, msg: "expecting From, got Identifier"},
 		{code: `DELETE FROM`, msg: "expecting Identifier, got EOF"},
-		//TODO: `DELETE FROM table_name WHERE`,
-		//TODO: `DELETE FROM table_name RETURNING`,
+		{code: `DELETE FROM table_name WHERE`, msg: "unexpected EOF"},
+		{code: `DELETE FROM table_name RETURNING`, msg: "unexpected EOF"},
 	}
 
 	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.delete(nil) })
@@ -1064,8 +1049,8 @@ func TestCTEError(t *testing.T) {
 		{code: `table_name AS (SELECT 10`, msg: "expecting RightParen, got EOF"},
 		{code: `table_name (col_a, col_b) (SELECT 10)`, msg: "expecting As, got LeftParen"},
 		{code: `table_name AS NOT (SELECT 10)`, msg: "expecting Materialized, got LeftParen"},
-		//TODO: {code: `table_name AS ()`, msg: "expecting Select, got RightParen"},
-		//TODO: {code: `table_name AS (WITH cte AS (SELECT 10))`, msg: ""},
+		{code: `table_name AS ()`, msg: "expecting Select, got RightParen"},
+		{code: `table_name AS (WITH cte AS (SELECT 10))`, msg: "expecting Select, got RightParen"},
 	}
 
 	runTestsError(t, cases, (*Parser).cte)
@@ -1523,7 +1508,6 @@ func TestIn(t *testing.T) {
 		`E{In{TTT SimpleSelect{
 				WithClause{T CommaList{CTE{TableName TT SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}
 				SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}`,
-		`10 IN (SELECT)`, "E{In{TTT SimpleSelect{SelectCore{T !ErrorMissing}} T}}",
 		`10 IN schema_name.table_name`, "E{In{TT SchemaName T TableName}}",
 		`10 IN schema_a.table_function_a(10, 20)`, "E{In{TT SchemaName T TableFunctionName T CommaList{TTT} T}}",
 		`10 IN MAX()`, "E{In{TT TableFunctionName TT}}",
@@ -1538,6 +1522,7 @@ func TestInError(t *testing.T) {
 		{code: `10 IN (1`, msg: "expecting RightParen, got EOF"},
 		{code: `10 IN function(10`, msg: "expecting RightParen, got EOF"},
 		{code: `10 IN ALTER`, msg: "expecting Identifier, got Alter"},
+		{code: `10 IN (SELECT)`, msg: "unexpected RightParen"},
 	}
 
 	runTestsError(t, cases, (*Parser).expression)
@@ -1597,7 +1582,7 @@ func TestNotMatchError(t *testing.T) {
 
 func TestNotInError(t *testing.T) {
 	cases := []testCaseError{
-		//TODO: {code: `10 NOT IN (SELECT)`, msg: "unexpected RightParen"},
+		{code: `10 NOT IN (SELECT)`, msg: "unexpected RightParen"},
 		{code: `10 NOT IN (ALTER)`, msg: "expecting RightParen, got Alter"},
 		{code: `10 NOT IN (1`, msg: "expecting RightParen, got EOF"},
 		{code: `10 NOT IN MAX(10`, msg: "expecting RightParen, got EOF"},
@@ -1763,6 +1748,11 @@ func TestSimpleExpression(t *testing.T) {
 		`?`, "E{BindParameter}",
 		`function_name()`, "E{FunctionCall{FunctionName T FnArgs{} T}}",
 		`(10)`, "E{ParenE{T CommaList{E{T}} T}}",
+		`(SELECT 10)`, "E{ParenSelect{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
+		`(WITH go AS (SELECT rust) SELECT 10)`,
+		`E{ParenSelect{T SimpleSelect{
+			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{ColRef{ColName}}}}}} T }}}
+			SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}`,
 		`CAST ('10' AS INTEGER)`, "E{Cast{TT E{T} T TypeName{T} T}}",
 		`NOT EXISTS (SELECT 10)`, "E{Not{T Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}}",
 		`EXISTS (SELECT 10)`, "E{Exists{T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T}}",
@@ -2164,12 +2154,12 @@ func TestExists(t *testing.T) {
 
 func TestExistsError(t *testing.T) {
 	cases := []testCaseError{
-		//TODO: {code: `EXISTS(SELECT)`, msg: ""},
+		{code: `EXISTS(SELECT)`, msg: "unexpected RightParen"},
 		{code: `EXISTS SELECT 10);`, msg: "expecting LeftParen, got Select"},
-		//TODO: {code: `EXISTS(10);`, msg: ""},
-		//TODO: {code: `EXISTS(10;`, msg: ""},
+		{code: `EXISTS(10);`, msg: "expecting Select, got Numeric"},
+		{code: `EXISTS(10;`, msg: "expecting Select, got Numeric"},
 		{code: `EXISTS (SELECT 10;`, msg: "expecting RightParen, got Semicolon"},
-		//TODO: {code: `EXISTS ();`, msg: ""},
+		{code: `EXISTS ();`, msg: "expecting Select, got RightParen"},
 	}
 
 	runTestsError(t, cases, (*Parser).expression)
@@ -2261,7 +2251,7 @@ func TestInsert(t *testing.T) {
 
 func TestInsertError(t *testing.T) {
 	cases := []testCaseError{
-		// TODO: {code: `INSERT INTO table_name(name) WITH cte AS (SELECT 10)`, msg: ""},
+		{code: `INSERT INTO table_name(name) WITH cte AS (SELECT 10)`, msg: "expecting Select, got EOF"},
 		{code: `INSERT OR INTO table_name(name) VALUES('Go')`, msg: "expecting [Abort Fail Ignore Replace Rollback], got Into"},
 		{code: `INSERT table_name(name) VALUES('Go')`, msg: "expecting Into, got Identifier"},
 		{code: `INSERT INTO AS table_alias (name) VALUES('Go')`, msg: "expecting [Identifier Temp], got As"},
@@ -2420,14 +2410,19 @@ func TestSelectStatement(t *testing.T) {
 		`SELECT 10 UNION ALL SELECT 20`,
 		`CompoundSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{TT} 
 			SelectCore{T CommaList{ResultColumn{E{T}}}} }`,
-		`SELECT 10 UNION`,
-		`CompoundSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} CompoundOperator{T} 
-			!ErrorMissing }`,
-		`SELECT 10, LIMIT 10`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}} T !ErrorMissing}} LimitClause{T E{T}}}",
-		//TODO: `SELECT 10 LIMIT`, "SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}} LimitClause{T !ErrorMissing}}",
 	)
 
 	runTests(t, cases, func(p *Parser) parsetree.NonTerminal { return p.selectStatement(nil) })
+}
+
+func TestSelectStatementError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `SELECT 10 UNION`, msg: "expecting Select, got EOF"},
+		{code: `SELECT 10, LIMIT 10`, msg: "unexpected Limit"},
+		{code: `SELECT 10 LIMIT`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, func(p *Parser) parsetree.NonTerminal { return p.selectStatement(nil) })
 }
 
 func TestSelectStatementCTE(t *testing.T) {
@@ -2484,10 +2479,17 @@ func TestSelectCore(t *testing.T) {
 				WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}} T
 				WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}} }} }`,
 		`VALUES (10), (20)`, `SelectCore{ValuesClause{T CommaList{ValuesItem{T CommaList{E{T}} T} T ValuesItem{T CommaList{E{T}} T}}}}`,
-		`SELECT`, "SelectCore{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).selectCore)
+}
+
+func TestSelectCoreError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `SELECT`, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).selectCore)
 }
 
 func TestResultColumn(t *testing.T) {
@@ -2495,22 +2497,110 @@ func TestResultColumn(t *testing.T) {
 		`col`, "ResultColumn{E{ColRef{ColName}}}",
 		`col col_alias`, "ResultColumn{E{ColRef{ColName}} ColumnAlias}",
 		`col AS alias`, "ResultColumn{E{ColRef{ColName}} T ColumnAlias}",
-		`col AS`, "ResultColumn{E{ColRef{ColName}} T !ErrorMissing}",
 		`table_name.*`, "ResultColumn{TableName T T}",
 		`*`, "ResultColumn{T}",
-		`insert`, "ResultColumn{!ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).resultColumn)
 }
 
+func TestResultColumnError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `col AS`, msg: "expecting Identifier, got EOF"},
+		{code: `insert`, msg: "unexpected Insert"},
+	}
+
+	runTestsError(t, cases, (*Parser).resultColumn)
+}
+
 func TestFromClause(t *testing.T) {
 	cases := testCases(
 		`FROM table_name`, "FromClause{T JoinClause{TableOrSubquery{TableName}}}",
-		`FROM 10`, "FromClause{T !ErrorExpecting}",
 	)
 
 	runTests(t, cases, (*Parser).fromClause)
+}
+
+func TestFromClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `FROM 10`, msg: "expecting LeftParen, got Numeric"},
+	}
+
+	runTestsError(t, cases, (*Parser).fromClause)
+}
+
+func TestJoinClause(t *testing.T) {
+	cases := testCases(
+		`table_name`, "JoinClause{TableOrSubquery{TableName}}",
+		`table_name_1, table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
+		`table_name_1 JOIN table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
+		`table_name_1 FULL JOIN table_name_2 ON TRUE`,
+		"JoinClause{TableOrSubquery{TableName} JoinOp{TT} TableOrSubquery{TableName} JoinConstr{T E{T}}}",
+		`table_name_1 JOIN table_name_2, table_name_2 ON a > 2`,
+		`JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}
+			JoinOp{T} TableOrSubquery{TableName} JoinConstr{T E{GreaterThan{ColRef{ColName} TT}}} }`,
+	)
+
+	runTests(t, cases, (*Parser).joinClause)
+}
+
+func TestJoinClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `table_name JOIN`, msg: "expecting LeftParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).joinClause)
+}
+
+func TestJoinOperator(t *testing.T) {
+	cases := testCases(
+		`,`, "JoinOp{T}",
+		`JOIN`, "JoinOp{T}",
+		`CROSS JOIN`, "JoinOp{TT}",
+		`FULL JOIN`, "JoinOp{TT}",
+		`INNER JOIN`, "JoinOp{TT}",
+		`LEFT NATURAL JOIN`, "JoinOp{TTT}",
+		`OUTER RIGHT JOIN`, "JoinOp{TTT}",
+		`INNER OUTER JOIN`, "JoinOp{TTT}",
+		`LEFT NATURAL OUTER JOIN`, "JoinOp{TTTT}",
+		`FULL CROSS OUTER JOIN`, "JoinOp{TTTT}",
+	)
+
+	runTests(t, cases, (*Parser).joinOperator)
+}
+
+func TestJoinOperatorError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `CROSS`, msg: "expecting Join, got EOF"},
+		{code: `FULL`, msg: "expecting Join, got EOF"},
+		{code: `INNER`, msg: "expecting Join, got EOF"},
+		{code: `LEFT`, msg: "expecting Join, got EOF"},
+		{code: `OUTER`, msg: "expecting Join, got EOF"},
+		{code: `RIGHT`, msg: "expecting Join, got EOF"},
+		{code: `NATURAL`, msg: "expecting Join, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).joinOperator)
+}
+
+func TestJoinConstraint(t *testing.T) {
+	cases := testCases(
+		`ON true`, "JoinConstr{T E{T}}",
+		`USING (col_a, col_b)`, "JoinConstr{T T CommaList{ColName T ColName} T}",
+	)
+
+	runTests(t, cases, (*Parser).joinConstraint)
+}
+
+func TestJoinConstraintError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `ON`, msg: "unexpected EOF"},
+		{code: `USING col_a, col_b)`, msg: "expecting LeftParen, got Identifier"},
+		{code: `USING (col_a`, msg: "expecting RightParen, got EOF"},
+		{code: `USING ()`, msg: "expecting Identifier, got RightParen"},
+	}
+
+	runTestsError(t, cases, (*Parser).joinConstraint)
 }
 
 func TestTableOrSubquery(t *testing.T) {
@@ -2531,129 +2621,131 @@ func TestTableOrSubquery(t *testing.T) {
 		`(table_name_1 JOIN table_name_2, table_name_2 ON a > 2)`,
 		`TableOrSubquery{T JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}
 			JoinOp{T} TableOrSubquery{TableName} JoinConstr{T E{GreaterThan{ColRef{ColName} TT}}} } T}`,
-		`.table_name`, "TableOrSubquery{!ErrorMissing T TableName}",
-		`schema_name.`, "TableOrSubquery{SchemaName T !ErrorExpecting}",
-		`table_name AS`, "TableOrSubquery{TableName T !ErrorMissing}",
-		`table_name INDEXED index_name`, "TableOrSubquery{TableName T !ErrorMissing IndexName}",
-		`table_name NOT`, "TableOrSubquery{TableName T !ErrorMissing}",
-		`table_function_name()`, "TableOrSubquery{TableFunctionName T !ErrorMissing T}",
-		`table_function_name(10`, "TableOrSubquery{TableFunctionName T CommaList{E{T}} !ErrorMissing}",
-		`table_function_name(10, 20) AS`, "TableOrSubquery{TableFunctionName T CommaList{E{T} T E{T}} T T !ErrorMissing}",
-		`(SELECT 10`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} !ErrorMissing}",
-		`(SELECT 10) AS`, "TableOrSubquery{T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{T}}}}} T T !ErrorMissing}",
-		`(table_name`, "TableOrSubquery{T JoinClause{TableOrSubquery{TableName}} !ErrorMissing}",
-		`()`, "TableOrSubquery{T !ErrorExpecting T}",
+		`(WITH go AS (SELECT rust) SELECT 10)`, `TableOrSubquery{T SimpleSelect{
+			WithClause{T CommaList{CTE{TableName T T SimpleSelect{SelectCore{T CommaList{ResultColumn{E{ColRef{ColName}}}}}} T }}}
+			SelectCore{T CommaList{ResultColumn{E{T}}}}} T}`,
 	)
 
 	runTests(t, cases, (*Parser).tableOrSubquery)
 }
 
-func TestJoinClause(t *testing.T) {
-	cases := testCases(
-		`table_name`, "JoinClause{TableOrSubquery{TableName}}",
-		`table_name_1, table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
-		`table_name_1 JOIN table_name_2`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}}",
-		`table_name_1 FULL JOIN table_name_2 ON TRUE`,
-		"JoinClause{TableOrSubquery{TableName} JoinOp{TT} TableOrSubquery{TableName} JoinConstr{T E{T}}}",
-		`table_name_1 JOIN table_name_2, table_name_2 ON a > 2`,
-		`JoinClause{TableOrSubquery{TableName} JoinOp{T} TableOrSubquery{TableName}
-			JoinOp{T} TableOrSubquery{TableName} JoinConstr{T E{GreaterThan{ColRef{ColName} TT}}} }`,
-		`table_name JOIN`, "JoinClause{TableOrSubquery{TableName} JoinOp{T} !ErrorExpecting}",
-	)
+func TestTableOrSubqueryError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `.table_name`, msg: "expecting LeftParen, got Dot"},
+		{code: `schema_name.`, msg: "expecting [Identifier Temp], got EOF"},
+		{code: `table_name AS`, msg: "expecting Identifier, got EOF"},
+		{code: `table_name INDEXED index_name`, msg: "expecting By, got Identifier"},
+		{code: `table_name NOT`, msg: "expecting Indexed, got EOF"},
+		{code: `table_function_name()`, msg: "unexpected RightParen"},
+		{code: `table_function_name(10`, msg: "expecting RightParen, got EOF"},
+		{code: `table_function_name(10, 20) AS`, msg: "expecting Identifier, got EOF"},
+		{code: `(SELECT 10`, msg: "expecting RightParen, got EOF"},
+		{code: `(SELECT 10) AS`, msg: "expecting Identifier, got EOF"},
+		{code: `(table_name`, msg: "expecting RightParen, got EOF"},
+		{code: `()`, msg: "expecting [With Select Identifier Temp LeftParen], got RightParen"},
+	}
 
-	runTests(t, cases, (*Parser).joinClause)
-}
-
-func TestJoinOperator(t *testing.T) {
-	cases := testCases(
-		`,`, "JoinOp{T}",
-		`JOIN`, "JoinOp{T}",
-		`CROSS JOIN`, "JoinOp{TT}",
-		`FULL JOIN`, "JoinOp{TT}",
-		`INNER JOIN`, "JoinOp{TT}",
-		`LEFT NATURAL JOIN`, "JoinOp{TTT}",
-		`OUTER RIGHT JOIN`, "JoinOp{TTT}",
-		`INNER OUTER JOIN`, "JoinOp{TTT}",
-		`LEFT NATURAL OUTER JOIN`, "JoinOp{TTTT}",
-		`FULL CROSS OUTER JOIN`, "JoinOp{TTTT}",
-		`NATURAL`, "JoinOp{T !ErrorMissing}",
-	)
-
-	runTests(t, cases, (*Parser).joinOperator)
-}
-
-func TestJoinConstraint(t *testing.T) {
-	cases := testCases(
-		`ON true`, "JoinConstr{T E{T}}",
-		`USING (col_a, col_b)`, "JoinConstr{T T CommaList{ColName T ColName} T}",
-		`ON`, "JoinConstr{T !ErrorMissing}",
-		`USING col_a, col_b)`, "JoinConstr{T !ErrorMissing CommaList{ColName T ColName} T}",
-		`USING (col_a`, "JoinConstr{T T CommaList{ColName} !ErrorMissing}",
-		`USING ()`, "JoinConstr{T T !ErrorMissing T}",
-	)
-
-	runTests(t, cases, (*Parser).joinConstraint)
+	runTestsError(t, cases, (*Parser).tableOrSubquery)
 }
 
 func TestGroupByClause(t *testing.T) {
 	cases := testCases(
 		`GROUP BY 10`, "GroupByClause{TT CommaList{E{T}}}",
-		`GROUP 10`, "GroupByClause{T !ErrorMissing CommaList{E{T}}}",
-		`GROUP BY `, "GroupByClause{TT !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).groupByClause)
 }
 
+func TestGroupByClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `GROUP 10`, msg: "expecting By, got Numeric"},
+		{code: `GROUP BY `, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).groupByClause)
+}
+
 func TestHavingClause(t *testing.T) {
 	cases := testCases(
 		`HAVING 10`, "HavingClause{T E{T}}",
-		`HAVING `, "HavingClause{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).havingClause)
+}
+
+func TestHavingClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `HAVING `, msg: "unexpected EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).havingClause)
 }
 
 func TestWindowClause(t *testing.T) {
 	cases := testCases(
 		`WINDOW window_a AS (PARTITION BY 10)`,
 		"WindowClause{T CommaList{WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}}}",
-		`WINDOW `,
-		"WindowClause{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).windowClause)
+}
+
+func TestWindowClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `WINDOW `, msg: "expecting Identifier, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).windowClause)
 }
 
 func TestWindowClauseItem(t *testing.T) {
 	cases := testCases(
 		`window_name AS (PARTITION BY 10)`,
 		"WindowClauseItem{WindowName T WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}",
-		`window_name (PARTITION BY 10)`,
-		"WindowClauseItem{WindowName !ErrorMissing WindowDefinition{T PartitionBy{TT CommaList{E{T}}} T}}",
-		`window_name`,
-		"WindowClauseItem{WindowName !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).windowClauseItem)
 }
 
+func TestWindowClauseItemError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `window_name (PARTITION BY 10)`, msg: "expecting As, got LeftParen"},
+		{code: `window_name`, msg: "expecting As, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).windowClauseItem)
+}
+
 func TestValuesClause(t *testing.T) {
 	cases := testCases(
 		`VALUES (10), (20)`, "ValuesClause{T CommaList{ValuesItem{T CommaList{E{T}} T} T ValuesItem{T CommaList{E{T}} T}}}",
-		`VALUES `, "ValuesClause{T !ErrorMissing}",
 	)
 
 	runTests(t, cases, (*Parser).valuesClause)
 }
 
+func TestValuesClauseError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `VALUES `, msg: "expecting LeftParen, got EOF"},
+	}
+
+	runTestsError(t, cases, (*Parser).valuesClause)
+}
+
 func TestValuesItem(t *testing.T) {
 	cases := testCases(
 		`(10, 20)`, "ValuesItem{T CommaList{E{T} T E{T}} T}",
-		`() `, "ValuesItem{T !ErrorMissing T}",
 	)
 
 	runTests(t, cases, (*Parser).valuesItem)
+}
+
+func TestValuesItemError(t *testing.T) {
+	cases := []testCaseError{
+		{code: `() `, msg: "unexpected RightParen"},
+	}
+
+	runTestsError(t, cases, (*Parser).valuesItem)
 }
 
 func TestLimitClause(t *testing.T) {
@@ -2666,16 +2758,14 @@ func TestLimitClause(t *testing.T) {
 	runTests(t, cases, (*Parser).limitClause)
 }
 
-/*TODO:
 func TestLimitClauseError(t *testing.T) {
 	cases := []testCaseError{
-		{code: `LIMIT 10,`, msg: ""},
-		{code: `LIMIT 10 OFFSET`, msg: ""},
+		{code: `LIMIT 10,`, msg: "unexpected EOF"},
+		{code: `LIMIT 10 OFFSET`, msg: "unexpected EOF"},
 	}
 
 	runTestsError(t, cases, (*Parser).limitClause)
 }
-*/
 
 func TestUpdate(t *testing.T) {
 	cases := testCases(
@@ -2705,7 +2795,7 @@ func TestUpdateError(t *testing.T) {
 	cases := []testCaseError{
 		{code: `UPDATE OR table_name SET col_name=10`, msg: "expecting [Abort Fail Ignore Replace Rollback], got Identifier"},
 		{code: `UPDATE schema_name.table_name col_name=10`, msg: "expecting Set, got Identifier"},
-		//TODO: {code: `UPDATE SET col_name=10`, msg: ""},
+		{code: `UPDATE SET col_name=10`, msg: "expecting Identifier, got Set"},
 		{code: `UPDATE table_name SET `, msg: "expecting [Identifier LeftParen], got EOF"},
 		{code: `UPDATE table_name SET a=10, `, msg: "expecting [Identifier LeftParen], got EOF"},
 		{code: `UPDATE table_name SET col_name=10 RETURNING *, `, msg: "unexpected EOF"},
