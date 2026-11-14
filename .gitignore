@@ -29,3 +29,6 @@ go.work.sum
 
 # the message of the next commit
 commit-msg.txt
+
+# what I am working on
+wip.txt

@@ -13,6 +13,17 @@ func TestParseTree(t *testing.T) {
 	tr.AddChild(NewNonTerminal(KindAlterTable))
 	tr.AddChild(NewTerminal(KindToken, token.New([]byte("SELECT"), token.KindSelect)))
 
+	if tr.Kind() != KindSQLStatement {
+		t.Logf("tr.Kind = %s, want %s", tr.Kind(), KindSQLStatement)
+		t.Fail()
+	}
+	
+	tr.SetKind(KindAnd)
+	if tr.Kind() != KindAnd {
+		t.Logf("tr.Kind = %s, want %s", tr.Kind(), KindAnd)
+		t.Fail()
+	}
+
 	if tr.NumberOfChildren() != 2 {
 		fmt.Printf("want 2 children, got %d", tr.NumberOfChildren())
 		t.Fail()
@@ -26,6 +37,11 @@ func TestParseTree(t *testing.T) {
 	}
 	if cs[1].Kind() != KindToken {
 		fmt.Printf("want %s, got %s", KindToken, cs[1].Kind())
+		t.Fail()
+	}
+	cs[1].SetKind(KindAnd)
+	if cs[1].Kind() != KindAnd {
+		t.Logf("cs[1].Kind = %s, want %s", tr.Kind(), KindAnd)
 		t.Fail()
 	}
 	if string(cs[1].(Terminal).Token().Lexeme) != "SELECT" {

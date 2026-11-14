@@ -219,6 +219,8 @@ var kindStrings = []string{
 type Construction interface {
 	// Kind returns the kind of the terminal.
 	Kind() Kind
+	// SetKind sets the kind of the Construction.
+	SetKind(k Kind)
 }
 
 // NonTerminal terminal represents a non terminal in the SQL grammar.
@@ -250,6 +252,10 @@ type nonTerminal struct {
 // Kind returns the kind of the non terminal.
 func (nt *nonTerminal) Kind() Kind {
 	return nt.kind
+}
+
+func (nt *nonTerminal) SetKind(k Kind) {
+	nt.kind = k
 }
 
 // AddChild add a child to nt.
@@ -294,6 +300,10 @@ type terminal struct {
 // Kind returns the kind of the terminal.
 func (t *terminal) Kind() Kind {
 	return t.kind
+}
+
+func (t *terminal) SetKind(k Kind) {
+	t.kind = k
 }
 
 // Token returns the token of the terminal.
